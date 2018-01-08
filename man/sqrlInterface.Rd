@@ -18,8 +18,10 @@ The name of a defined data source (character string).
   \item{interface}{
 The name to use for the data source's interface function (character string).
 If omitted, the data source name is used by default.
+If set to 'remove', the data source's interface will be removed.
 }
   \item{delete}{
+This argument has been deprecated, and will be removed in a future release.
 If set to TRUE, the 'interface' argument is ignored and any existing interface
 to the data source is deleted.
 }
@@ -53,9 +55,11 @@ sqrlSources()
 ent("name")
 
 \dontrun{
-
 ent("select ", 1)
 ent("My/SQL/", file, ".sql")
 }
+
+sqrlInterface("entropy", "remove")
+sqrlSources()
 }
 \keyword{ interface }

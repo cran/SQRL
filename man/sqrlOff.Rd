@@ -14,11 +14,11 @@ sqrlOff(ensure = FALSE)
 }
 \arguments{
   \item{ensure}{
-If this is set to TRUE, the function will additionally call
+This argument has been deprecated, and will be removed in a future release.
+If set to TRUE, the function will additionally call
 '\link[RODBC:odbcCloseAll]{RODBC:odbcCloseAll}' to ensure all 'RODBC'
 connections are closed.
-However, this will also close any 'RODBC' connections not belonging to 'SQRL'.
-Use of this option should not normally be necessary.
+This will also close any 'RODBC' connections not belonging to 'SQRL'.
 }
 }
 \value{
@@ -27,13 +27,19 @@ Returns invisible NULL.
 \author{
 \packageAuthor{SQRL}
 }
+\note{
+Calls to '\link[RODBC:odbcCloseAll]{RODBC:odbcCloseAll}' will close any 
+connection channels open in 'SQRL'.
+}
 \seealso{
 \code{\link[RODBC:RODBC-package]{RODBC}}
 }
 \examples{
 require(SQRL)
 
+\dontrun{
 # Calling sqrlOff() will deactivate and unload SQRL.
 sqrlOff()
+}
 }
 \keyword{ database }

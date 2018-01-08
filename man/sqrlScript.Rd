@@ -4,8 +4,8 @@
 Combined 'SQL' with 'R' Scripts
 }
 \description{
-This material does not describe a function, but the 'SQRL' file format for 'SQL'
-with embedded 'R'.
+This material does not describe a function, but (rather) the 'SQRL' file format
+for 'SQL' with embedded 'R'.
 }
 \format{
 'SQRL' supports multi-statement 'SQL' files.
@@ -41,14 +41,14 @@ highlighting can be better applied to the file.
 
 -- This is SQL
 select
-  <r>
+  <R>
     # This is R
     if (exists("x")) {
       x
     } else {
       0
     }
-  </r>
+  </R>
 /* This is SQL */
 from
   dual
@@ -84,7 +84,7 @@ a <- a + 1
 <do>
 
 -- Use the earlier result in a new query.
-select <r> b <- runif(1); a + b </r>
+select <R> b <- runif(1); a + b </R>
 
 -- This time, don't assign the result in R.
 -- (More appropriate after, say, create table.)
@@ -122,8 +122,8 @@ x <- 9
 ## END OF SAMPLE FILE #4
 }
 
-'R' lists are pasted-in comma collapsed.
-'R' vectors are pasted-in newline collapsed.
+Lists are inserted comma collapsed.
+Vectors are inserted newline collapsed.
 
 \preformatted{## START OF SAMPLE FILE #5
 
@@ -133,10 +133,10 @@ wordlist <- list("'red'", "'blue'")
 conditions <- c("and columnA < 2", "and columnD > 4")
 <do>
 
-select <r> columns </r>
+select <R> columns </R>
 from dbname.tablename
-where columnC in (<r> wordlist </r>)
-<r> conditions </r>
+where columnC in (<R> wordlist </R>)
+<R> conditions </R>
 
 ## END OF SAMPLE FILE #5
 }
@@ -147,7 +147,12 @@ where columnC in (<r> wordlist </r>)
 \note{
 The 'verbose' parameter toggles verbose output when running scripts.
 
-Nested queries can be made from within 'r' ('<r> .. </r>') tags.
+Tags are not case sensitive (other than the name of the assignment variable in a
+'result' tag).
+
+'R' ('<R> .. </R>') tags cannot be nested.
+
+Nested queries can be made from within 'R' ('<R> .. </R>') tags.
 }
 \seealso{
 \code{\link{sqrlConfig}}, \code{\link{sqrlUsage}}
@@ -157,7 +162,6 @@ require(SQRL)
 sqrlSource("entropy", "dbcname=EntSrvr;driver=PostgreSQL ANSI(x64)")
 
 \dontrun{
-
 entropy("my/query.sqrl")
 }
 }

@@ -74,10 +74,6 @@ the named data source interface function.
 
 The interface can be changed after source definition, if mismatched (source,
 interface) names are required.
-
-In addition to the usual manner, file paths can be specified as 'A<<B'.
-Such paths are interpreted as start from directory 'A' (or the current
-directory, if 'A' is omitted), and climb back up toward root until 'B' is found.
 }
 \seealso{
 \code{\link{sqrlConfig}}, \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}
@@ -92,7 +88,6 @@ sqrlSource("entcopy", "entropy")
 sqrlSources()
 
 \dontrun{
-
 sqrlSource("entropy", "path/to/entropy.config")
 sqrlSource("entropy", "path/", "to/", otherfile, ".txt")
 }

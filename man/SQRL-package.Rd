@@ -18,13 +18,13 @@ Provides visual indication of queries-in-progress (platform dependent).
 Performs implicit pasting of multiple expressions into single statements.
 Detects closure of connection channels by remote servers.
 Attempts reconnection after network outages.
-Wrapper to 'RODBC' (and, as such, purely a tool of convenience).
+Wrapper to 'RODBC' (and, as such, purely an option of convenience).
 }
 \details{
 \tabular{ll}{ \tab \cr
 Package:  \tab 'SQRL' \cr
-Version:  \tab 0.1.0 \cr
-Date:     \tab 2017-11-08 \cr
+Version:  \tab 0.1.1 \cr
+Date:     \tab 2018-01-08 \cr
 Licence:  \tab GPL-3 \cr
 Depends:  \tab 'R' (>= 3.2.0) \cr
 Imports:  \tab 'base', 'RODBC' \cr
@@ -59,6 +59,7 @@ sqrlSource("entropy",
             "uid=<uid>;pwd=<pwd>")
 entropy("config")
 
-# Calling sqrlOff() will deactivate and unload SQRL.
-sqrlOff()
+\dontrun{
+entropy("select ", 1)
+}
 }

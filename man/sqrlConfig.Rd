@@ -4,8 +4,8 @@
 Parameters and Configuration Files
 }
 \description{
-This material does not describe a function, but the file format used to create
-and configure 'SQRL' interfaces and 'RODBC' communications.
+This material does not describe a function, but (rather) the file format used to
+create and configure 'SQRL' interfaces and 'RODBC' communications.
 
 Configuration files can be used to define new data sources (via
 '\link{sqrlSource}'), set blanket parameter values for existing data sources
@@ -141,7 +141,6 @@ sqrlSource("entropy", "dbcname=EntSrvr;driver=PostgreSQL ANSI(x64)")
 entropy("config")
 
 \dontrun{
-
 # Configure existing source from a config file.
 entropy("config", "my/config/file")
 

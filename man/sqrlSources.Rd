@@ -37,7 +37,6 @@ require(SQRL)
 sqrlSources()
 
 \dontrun{
-
 # Sample sqrlSources() output:
 
    name interface open  uid                     driver

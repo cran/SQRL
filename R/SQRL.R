@@ -21,6 +21,14 @@
 
 #################################################################### HISTORY ###
 
+# 5 January 2018 -- 8 January 2018.
+# Patched for compliance with 4 January 2018 version of R-devel (3.5.0); wrapped
+# help-file sqrlOff() examples in \dontrun{}. Deprecated several commands and
+# arguments (better alternatives exist in all cases, and are suggested on use).
+# Fixed bug in call to RODBC::sqlColumns() (misspelled lexical argument).
+
+# 12 November 2017. CRAN release 0.1.0.
+
 # 10 November 2017.
 # Changed default from visible TRUE to visible FALSE. (Since visibility means
 # altering the user's prompt, it'd be polite to get permission first.) Added
@@ -31,7 +39,7 @@
 # capability. Dropped SQL version (vendor) specific features. Avoided the need
 # for ahead-of-time or build-time source knowledge.
 
-# 15 April 2014 -- 12 June, 2014.
+# 15 April 2014 -- 12 June 2014.
 # Packaged prototypes. Added support for multi-statement files with embedded R,
 # but inherited the SQL version and advanced knowledge requirements of the
 # prototype. Introduced stripping of comments from SQL prior to submission (on
@@ -301,7 +309,7 @@ SqrlConfig <- function(datasource = "",
     {
       value <- base::c(config[[param]], value)
     }
-    
+
     # Retain the (name, value) pair, provided the name is not blank, and not
     # 'channel' (blocks setting/overwriting of this parameter).
     if ((base::nchar(param) > 0)
@@ -456,8 +464,8 @@ SqrlDelegate <- function(datasource = "",
   other.words <- base::trimws(base::sub(first.word, "", command, fixed = TRUE))
   only.word <- base::ifelse((base::nchar(other.words) == 0)
                               && (SqrlCountArgs(...) == 1),
-                              first.word, "")                           
-                              
+                              first.word, "")
+
   # If the only word is 'close', close the data source channel.
   if ("close" == only.word)
   {
@@ -472,7 +480,7 @@ SqrlDelegate <- function(datasource = "",
   if ("columns" == first.word)
   {
     base::return(RODBC::sqlColumns(channel = SqrlParam(datasource, "channel"),
-                                    sqltable = other.words,
+                                    sqtable = other.words,
                                     errors = SqrlParam(datasource, "errors"),
                                     as.is = TRUE))
   }
@@ -502,12 +510,18 @@ SqrlDelegate <- function(datasource = "",
   # If the only word is 'off', close SQRL channels, terminate functionality.
   if ("off" == only.word)
   {
+    base::warning(base::paste("The 'off' command is deprecated and will be",
+        "removed in a future release.\nReason: closes channels other than that",
+        " of the calling interface.\nUse sqrlOff(), instead."))
     base::return(SqrlOff())
   }
 
   # If the only word is 'off*', close all (SQRL and other) RODBC channels.
   if ("off*" == only.word)
   {
+    base::warning(base::paste("The 'off*' command is deprecated and will be",
+        "removed in a future release.\nReason: closes channels other than that",
+        " of the calling interface.\nUse sqrlOff(), instead."))
     base::return(SqrlOff(hard = TRUE))
   }
 
@@ -570,7 +584,7 @@ SqrlDelegate <- function(datasource = "",
     {
       base::stop("Parameter is read-only.")
     }
-    
+
     # If the other words specify a file; set the parameter's value from that.
     if (!base::is.null(SqrlPath(other.words)))
     {
@@ -1281,15 +1295,13 @@ SqrlIndicator <- function(datasource = "",
 
 SqrlInterface <- function(datasource = "",
                           interface = "",
-                          vital = TRUE,
-                          delete = FALSE)
+                          vital = TRUE)
 {
   # Constructs a user-interface to a specified data source.
   # Args:
   #   datasource : The name of a known data source.
   #   interface  : The name to use for that data source's interface.
   #   vital      : When set to FALSE, name conflicts are non-fatal.
-  #   delete     : When set to TRUE, the data source's interface is deleted.
   # Returns:
   #   A function (named <interface>) for interacting with the data source.
   #   Any pre-existing interface to that data source will be deleted.
@@ -1313,7 +1325,6 @@ SqrlInterface <- function(datasource = "",
   #   all cases, existence of the datasource is established before calling this
   #   function. The interface parameter is guaranteed to be a character string
   #   (singleton), but it is not assured to be usable (that is checked here).
-  #   The delete parameter is guaranteed to be either TRUE or FALSE (not NA).
 
   # This is the user-interface function-body definition for the data source.
   uibody <- base::paste("function(...) {base::return(SqrlDelegate(\"",
@@ -1326,7 +1337,7 @@ SqrlInterface <- function(datasource = "",
   # interface object retains its original SQRL definition, then we delete that
   # object. Either way, the interface is de-registered in the data source's
   # cache, and an invisible NULL is returned.
-  if (delete)
+  if (base::identical(interface, "remove"))
   {
     if (!base::is.null(preface))
     {
@@ -1358,7 +1369,6 @@ SqrlInterface <- function(datasource = "",
   }
 
   # If no interface was specified, use the data source name (sans whitespace).
-  interface <- base::trimws(interface)
   if (base::nchar(interface) < 1)
   {
     interface <- base::gsub("[[:space:]]+", "", datasource)
@@ -1401,7 +1411,7 @@ SqrlInterface <- function(datasource = "",
   if (!base::is.null(preface)
       && (preface != interface))
   {
-    SqrlInterface(datasource, delete = TRUE)
+    SqrlInterface(datasource, "remove")
   }
 
   # Assign the interface function to the chosen name. Note that changing the
@@ -1561,7 +1571,7 @@ SqrlOff <- function(hard = FALSE)
   {
     base::suppressWarnings(base::try(SqrlClose(datasource), silent = TRUE))
     base::suppressWarnings(
-            base::try(SqrlInterface(datasource, delete = TRUE), silent = TRUE))
+            base::try(SqrlInterface(datasource, "remove"), silent = TRUE))
     cache <- SqrlCache(datasource)
     base::suppressWarnings(base::try(base::remove(
                             list = base::objects(pos = cache, all.names = TRUE),
@@ -1939,7 +1949,7 @@ SqrlParam <- function(datasource = "",
       base::assign(parameter, set, cacheenvir)
       base::return(base::invisible(set))
     }
-    
+
     # The pwd parameter is a special case, because we don't want to return the
     # actual password (someone might be looking).
     if (parameter == "pwd")
@@ -2110,6 +2120,10 @@ SqrlPath <- function(...)
   if ((base::length(pos) == 1)
       && (pos > 0))
   {
+    base::warning(base::paste("The << back-search operator is deprecated and",
+        "will be removed in a future release.\nReason: only used for",
+        "portabilty, and that but rarely.\nUse an external search function",
+        "instead."))
     before <- base::trimws(base::substring(filepath, 0, pos - 1))
     after <- base::trimws(base::substring(filepath, pos + base::nchar("<<")))
     if (base::nchar(before) < 1)
@@ -2678,6 +2692,15 @@ sqrlInterface <- function(datasource = "",
     base::stop("Invalid interface name.")
   }
 
+  # The delete parameter is deprecated.
+  if (!base::missing(delete))
+  {
+    base::warning(base::paste("The 'delete' argument is deprecated and will ",
+      "be removed in a future release.\nReason: unnecessary, can no longer ",
+      "specify both name and deletion.\nUse sqrlInterface(\"", datasource, "\"",
+      ", \"remove\"), instead.", sep = ""))
+  }
+
   # Abort on an invalid delete value (can be TRUE or FALSE, only).
   if (!base::identical(delete, FALSE)
       && !base::identical(delete, TRUE))
@@ -2685,8 +2708,14 @@ sqrlInterface <- function(datasource = "",
     base::stop("Invalid delete-parameter value.")
   }
 
+  # If the (deprecated) delete parameter was set, substitute the new equivalent.
+  if (delete)
+  {
+    interface <- "remove"
+  }
+
   # Relay the arguments to SqrlInterface().
-  base::return(SqrlInterface(datasource, interface, delete = delete))
+  base::return(SqrlInterface(datasource, interface))
 }
 
 sqrlOff <- function(ensure = FALSE)
@@ -2703,6 +2732,14 @@ sqrlOff <- function(ensure = FALSE)
   #   coerced to a Boolean singleton (either TRUE or FALSE, not NA) before
   #   passing on.
 
+  # The ensure argument is deprecated.
+  if (!base::missing(ensure))
+  {
+    base::warning(base::paste("The 'ensure' argument is deprecated and will be",
+      "removed in a future release.\nReason: sqrlOff() is now more robust and",
+      "this argument is no longer required.\nCall without this argument."))
+  }
+  
   # Relay the command-option to SqrlOff() (returns invisible NULL).
   base::return(SqrlOff(base::identical(ensure, TRUE)))
 }

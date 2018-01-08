@@ -4,10 +4,10 @@
 How to Use the Interface Functions
 }
 \description{
-This material does not describe a function, but how to use 'SQRL' interfaces,
-once created.
-These do not have their own help files, since their names are not static, but
-reflect those of local data sources.
+This material does not describe a function, but (rather) how to use 'SQRL'
+interfaces, once created.
+These do not have their own help files, since their names are not static and
+echo those of local data sources.
 }
 \details{
 Once you have a named interface, either created automatically on loading of the
@@ -68,10 +68,10 @@ chaos("config", filepath)
 chaos("config")
 
 # Change the interface.
-chaos("interface", "CHAOS")
+chaos("interface", "K")
 
 # Change it back.
-CHAOS("interface", "chaos")
+K("interface", "chaos")
 
 # Call sqrlSources().
 chaos("sources")
@@ -100,17 +100,6 @@ chaos("na.strings", "NA")
 chaos("typeinfo")
 chaos("tables")
 chaos("columns", "my.table")
-
-# Turn SQRL off (with ensure = FALSE).
-# (See the help for sqrlOff().)
-chaos("off")
-
-# Turn SQRL off (with ensure = TRUE).
-# (See the help for sqrlOff().)
-chaos("off*")
-
-# These last two ('off's) affect connections besides that of
-# chaos(), and are perhaps best avoided in production code.
 }
 }
 \author{
