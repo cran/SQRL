@@ -1,3 +1,6 @@
+% https://cran.r-project.org/doc/manuals/r-release/R-exts.html
+% https://developer.r-project.org/Rds.html
+
 \name{SQRL-package}
 \alias{SQRL-package}
 \alias{SQRL}
@@ -6,60 +9,55 @@
 \packageTitle{SQRL}
 }
 \description{
-Handles multi-statement 'SQL' scripts, optionally containing embedded 'R'.
-Enables parameterized 'SQL' queries.
-Stops on remote 'SQL' errors.
-Automatic generation of a like-named user-interface to each data source.
-Manages multiple connections, their interfaces, and their parameters.
-Supports data-source/connection configuration files.
-Protects connection handles from deletion.
-Provides visual indication of which connections/channels are open.
-Provides visual indication of queries-in-progress (platform dependent).
-Performs implicit pasting of multiple expressions into single statements.
-Detects closure of connection channels by remote servers.
-Attempts reconnection after network outages.
-Wrapper to 'RODBC' (and, as such, purely an option of convenience).
+Wrapper of convenience about \pkg{RODBC}.
+Supports parameterised multi-statement \acronym{SQL} scripts with embedded \R.
+Generates like-named user-interfaces for \acronym{ODBC} (Open Database
+Connectivity) data sources.
+Implicitly manages connection handles and communication parameters.
+Provides visual indication of open channels and queries in progress.
+Detects lost connections and attempts recovery.
 }
 \details{
-\tabular{ll}{ \tab \cr
-Package:  \tab 'SQRL' \cr
-Version:  \tab 0.1.1 \cr
-Date:     \tab 2018-01-08 \cr
-Licence:  \tab GPL-3 \cr
-Depends:  \tab 'R' (>= 3.2.0) \cr
-Imports:  \tab 'base', 'RODBC' \cr
-Suggests: \tab 'utils' \cr
-}
-
-\packageIndices{SQRL}
-
-On load, the package will look for data source names (DSNs) via 'RODBC', and
-attempt to create a like-named interface function for each (additional data
-sources can be defined at any time).
+On load, the package will look for data source names (\acronym{DSN}s) via
+\pkg{RODBC}, and attempt to create a like-named interface function
+for each (additional data sources can be defined at any time).
 These interfaces dispense with the need for explicit connection parameters on
 every query.
-They support multi-statement 'SQL' scripts, with or without embedded 'R'
+They support multi-statement \acronym{SQL} scripts, with or without embedded \R
 expressions.
 }
 \author{
 \packageAuthor{SQRL}
 }
-\keyword{ database }
-\keyword{ interface }
-\keyword{ package }
 \seealso{
+\code{\link{sqrlInterface}},
+\code{\link{sqrlUsage}},
 \code{\link[RODBC:RODBC-package]{RODBC}}
 }
 \examples{
 require(SQRL)
+
+# Show (pre)defined data sources.
 sqrlSources()
-sqrlSource("entropy",
-            "dbcname=EntSrvr",
-            "driver=PostgreSQL ANSI(x64)",
-            "uid=<uid>;pwd=<pwd>")
-entropy("config")
+
+# Define a new data source.
+sqrlSource("mysource",
+            driver = "MYSQL ODBC 5.3 ANSI Driver",
+            server = "localhost",
+            user = "<uid>",
+            password = "<pwd>")
+
+# Obtain help on usage.
+mysource("help")
 
 \dontrun{
-entropy("select ", 1)
+# Submit a query to the new source.
+mysource("select 1")
+
+# Submit a parameterised query from file.
+mysource("transactions.sqrl", customerid = 111111)
 }
 }
+\keyword{database}
+\keyword{interface}
+\keyword{package}

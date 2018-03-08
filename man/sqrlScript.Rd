@@ -1,44 +1,35 @@
 \name{sqrlScript}
 \alias{sqrlScript}
 \title{
-Combined 'SQL' with 'R' Scripts
+Combined Language Scripts
 }
 \description{
-This material does not describe a function, but (rather) the 'SQRL' file format
-for 'SQL' with embedded 'R'.
+This material does not describe a function, but (rather) the \pkg{SQRL} script
+file format for \acronym{SQL} with embedded \R.
+
+For instructions on how to submit (run) these scripts from file, refer to
+\code{\link{sqrlUsage}}.
+
+The following (very simple) example scripts won't necessarily work with
+your own version of \acronym{SQL} or your own data source.
 }
-\format{
-'SQRL' supports multi-statement 'SQL' files.
-These can be copied directly from 'SQL Developer' (or similar application).
-
-The following (very simple) samples won't necessarily work in your own 'SQL' on
-your own database.
-
-In the sample below, only the final result, a data frame containing a single
-value of 3, is returned to the calling environment.
-
-\preformatted{## START OF SAMPLE FILE #1
-
+\section{Example Script #1}{
+\preformatted{
 -- My file
 select 1;
 select 2;
 select 3;
-
-## END OF SAMPLE FILE #1
 }
-
-'SQRL' allows embedding of 'R' into these 'SQL' files, within 'XML'-style tags.
-This enables ('R') parameterized 'SQL' queries, and wrapper functions can be
-written to make those parameters explicit, if required.
-
-In the sample below, a variable 'x' will be inherited from the calling
-environment (or a default value of 0 will be used if 'x' is not found).
-'SQL' comments are allowed within these 'R' sections, so that 'SQL' syntax
-highlighting can be better applied to the file.
-'R' comments are allowed within 'R' sections, but not within 'SQL' sections.
-
-\preformatted{## START OF SAMPLE FILE #2
-
+\subsection{Commentary on Example Script #1}{
+Multi-statement \acronym{SQL} files can be copied directly from
+\dQuote{SQL Developer} (or similar application).
+Each of the (above) three queries will be submitted in turn.
+Only the final result will be returned to the \R calling environment (in this
+case, a data frame containing a single value of 3).
+}
+}
+\section{Example Script #2}{
+\preformatted{
 -- This is SQL
 select
   <R>
@@ -52,117 +43,147 @@ select
 /* This is SQL */
 from
   dual
-
-## END OF SAMPLE FILE #2
 }
+\subsection{Commentary on Example Script #2}{
+\pkg{SQRL} supports the embedding of \R within \acronym{SQL}, via
+\acronym{XML}-style tags (\code{<R> ... </R>}), as above.
+This enables (explicitly and/or implicitly) parameterised \acronym{SQL} queries.
 
-'SQRL' can run one query from a script, manipulate the result in 'R', use that
-result in subsequent query in the same script, and so on.
-Only the final result is returned to the calling environment.
+In this example (above), if the variable \var{x} was explicitly passed to the
+query, then the supplied value will be used (see \code{\link{sqrlUsage}}).
+If \var{x} was not explicitly passed, then it can be inherited (implicitly
+passed) from the calling environment.
+In this case, if \var{x} was not explicitly supplied and also does not \var{x}
+exist within the calling environment, then a default value of 0 will be used.
 
-\preformatted{## START OF SAMPLE FILE #3
+\acronym{SQL} comments are allowed within \R (\code{<R> ... </R>}) sections, so
+that \acronym{SQL} syntax highlighting can be better applied to the file.
+\R comments are not allowed within \acronym{SQL} sections
 
--- SQL query, ending on the semi-colon.
-select 1;
+Nested \acronym{SQL} queries can be made from within \code{<R> ... </R>} tags.
+However, \code{<R> ... </R>} tags cannot be nested themselves.
+}
+}
+\section{Example Script #3}{
+\preformatted{
+-- SQL statement, ending on a semi-colon.
+use mydatabase;
 
-/* SQL query, ending on a 'do' tag. */
-select 1
+/* SQL statement, ending on a <do> tag. */
+create table mynewtable
+as select columnA, columnB
+from originaltable
 <do>
 
--- SQL query, ending on a 'result' (assignment) tag.
-select 1
-
--- Submit query, assign the result to an R variable 'a'
--- within the SQRL working environment (not the calling).
+-- SQL query, ending on a <result> (assignment) tag.
+-- In this case, the result of the query (a data frame)
+-- is assigned to an R variable 'a' (within a temporary
+-- working environment communal to this script).
+select max(columnA)
+from mynewtable
 <result -> a>
 
--- Increment a
-# R comments apply in R sections, SQL in both.
-a <- a + 1
-
-# Advance to next SQL statement
+# Manipulate the result in R, then
+# proceed to the next SQL statement.
+b <- runif(1)
+a <- as.numeric(a) + b
 <do>
 
 -- Use the earlier result in a new query.
-select <R> b <- runif(1); a + b </R>
+select columnA, columnB from mynewtable
+where columnA > <R> a * b </R>
+and columnB < <R> z <- 5; z + 2 </R>
+<result -> x>
 
--- This time, don't assign the result in R.
--- (More appropriate after, say, create table.)
-<result -> null>
-
--- Perform arbitrary R manipulation.
-a <- a * 2
-
--- Final result, returned to calling environment.
-return(a)
-
-## END OF SAMPLE FILE #3
+-- Only the result of the final operation
+-- is returned on the end of the script.
+return(list(minA = min(x$columnA),
+            maxB = max(x$columnB))
 }
+\subsection{Commentary on Example Script #3}{
+\acronym{SQL} statements are terminated by any one of a semicolon, a \code{<do>}
+tag, a \code{<result>} tag, or the end of the file.
+After a \code{<result>} tag, statements are interpreted as \R (as opposed to
+\acronym{SQL}) until either a \code{<do>} tag, or the end of the file, is 
+encountered.
+Following a \code{<do>} tag, statements are interpreted as \acronym{SQL}.
 
-To set 'R' variables before submitting any 'SQL', use an empty query.
-A 'stop' tag can be used to interrupt a script (for debugging).
+In the case of a \code{<result -> var>} tag, the \acronym{SQL} query result is
+assigned to an \R variable \var{var} within the script's temporary working 
+environment.
+This variable can be arbitrarily manipulated in \R, and the result of that 
+manipulation used as part of a subsequent \acronym{SQL} query.
 
-\preformatted{## START OF SAMPLE FILE #4
+With the exception of the name of the target (assignment) variable within a
+\code{result} tag, tags are not case sensitive.
+When the name of the target variable is either \dQuote{null} or \dQuote{NULL},
+then the query result is not assigned into the working environment (like with a 
+\code{<do>} tag), but the subsequent script is still interpreted as \R (unlike
+with a \code{<do>} tag).
 
+After the end of the script, the working environment is lost, along with any
+variables within it.
+Only the final result is returned to the calling environment.
+}
+}
+\section{Example Script #4}{
+\preformatted{
 -- Empty query, nothing submitted.
 -- Don't assign the result.
 <result -> null>
 
--- Set R variables here.
-x <- 5
-
--- Stop tag; script ends here.
--- (5 is returned, statements below are not run.)
-
-<stop>
-
--- Not run, not returned.
-x <- 9
-
-## END OF SAMPLE FILE #4
-}
-
-Lists are inserted comma collapsed.
-Vectors are inserted newline collapsed.
-
-\preformatted{## START OF SAMPLE FILE #5
-
-<result -> null>
+-- Set temporary R variables here.
 columns <- list("columnA", "columnB")
 wordlist <- list("'red'", "'blue'")
 conditions <- c("and columnA < 2", "and columnD > 4")
 <do>
 
-select <R> columns </R>
-from dbname.tablename
-where columnC in (<R> wordlist </R>)
-<R> conditions </R>
+-- Now the query.
+select
+  <R> columns </R>
+from
+  dbname.tablename
+where
+  columnC in (<R> wordlist </R>)
+  <R> conditions </R>
+  
+-- End the script here.
+-- The statements below are ignored.
+<stop>
+  and columnA > 0
+}
+\subsection{Commentary on Example Script #4}{
+To set \R variables prior to submitting any \acronym{SQL}, use an empty query.
 
-## END OF SAMPLE FILE #5
+Lists are inserted comma collapsed.
+Vectors are inserted newline collapsed.
+
+A \code{<stop>} tag imitates the end of the file, and can be used to interrupt a
+script for debugging.
 }
-}
-\author{
-\packageAuthor{SQRL}
 }
 \note{
-The 'verbose' parameter toggles verbose output when running scripts.
-
-Tags are not case sensitive (other than the name of the assignment variable in a
-'result' tag).
-
-'R' ('<R> .. </R>') tags cannot be nested.
-
-Nested queries can be made from within 'R' ('<R> .. </R>') tags.
+The \var{verbose} parameter toggles verbose output when running scripts (see
+\code{\link{sqrlParams}}).
 }
 \seealso{
-\code{\link{sqrlConfig}}, \code{\link{sqrlUsage}}
+\code{\link{sqrlConfig}},
+\code{\link{sqrlUsage}}
 }
 \examples{
-require(SQRL)
-sqrlSource("entropy", "dbcname=EntSrvr;driver=PostgreSQL ANSI(x64)")
+# Define a new data source.
+sqrlSource("mire", "dsn=Mire")
 
 \dontrun{
-entropy("my/query.sqrl")
+# Submit a SQL script to the source.
+mire("my/script.sql")
+
+# Submit a SQRL script to the source.
+mire("my/script.sqrl")
+
+# Submit a SQRL script, with explicit parameter values.
+mire("my/parameterised/script.sqrl",
+      day = Sys.Date(), colour = "'blue'")
 }
 }
-\keyword{ file }
+\keyword{file}

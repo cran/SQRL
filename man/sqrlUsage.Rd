@@ -4,114 +4,162 @@
 How to Use the Interface Functions
 }
 \description{
-This material does not describe a function, but (rather) how to use 'SQRL'
-interfaces, once created.
-These do not have their own help files, since their names are not static and
-echo those of local data sources.
+This material does not describe a single function, but (rather) how to use 
+\pkg{SQRL} interfaces, once created.
+These functions do not have their own help files, since their names are not
+pre-determined.
 }
 \details{
-Once you have a named interface, either created automatically on loading of the
-'SQRL' namespace, or manually by 'sqrlSource', it can be used to communicate
-with the associated data source.
-An advantage of this approach, is that connection handles, pasting, and 'RODBC'
-parameters are implicit, rather than explicit.
-This makes for faster exploratory work.
-It also shifts the emphasis to the data sources by name, and away from those 
-of the various functions used to communicate with them.
+Once you have a named interface, created either automatically (on loading of the
+\pkg{SQRL} namespace) or manually (via
+\code{\link[SQRL:sqrlSource]{sqrlSource()}}), it can be used to communicate with
+the associated data source.
+Connection handles and communication parameters are managed under the hood.
 
-\preformatted{# Call sqrlSources to see which interfaces are defined.
-sqrlSources()
-
-# Let's say you have an interface called 'chaos'.
-
+Subsequent sections provide usage examples for an interface called \code{chaos}.
+The names of your own interface functions can be discovered by calling 
+\code{\link[SQRL:sqrlSources]{sqrlSources()}}.
+}
+\section{Opening and Closing}{
+\preformatted{
 # Open a connection to the data source.
-# This will be called automatically when you first
-# submit a query, and is not strictly necessary.
-chaos() (or chaos("open"))
+chaos()
 
-# Doing this is fine; the channel handle is hidden.
+# Alternative method (explicit form).
+chaos("open")
+
+# Doing this is fine (the channel survives).
 rm(list = ls(all.names = TRUE))
 
-# Is the connection open?
-# This makes sure, by pinging the source.
-# If TRUE, we don't simply think it's open from our end.
+# Check if the connection is open.
 chaos("isopen")
-
-# Enable visible indication of open connections.
-# Since this requires modifying global options (the prompt
-# and the window title), the default is FALSE (disabled).
-# Assigning TRUE authorises SQRL to read and write these
-# parameters (and nothing else). Window-title indication
-# is only supported in Rgui and Rterm, on Windows OS.
-chaos("visible", TRUE)
 
 # Close the connection.
 chaos("close")
+}
+Opening connections in the above way isn't usually necessary, since this occurs
+automatically as required.
 
-# Submit a query (connection will re-open).
+The \command{isopen} command \dQuote{pings} the data source, to reliably
+establish whether or not the connection really is open (including after a
+network outage or remote closure).
+}
+\section{Submitting Queries}{
+\preformatted{
+# Submit a query.
 chaos("select ", 1, " from dual")
 
 # Submit a query from file.
-# See the help for sqrlSource() regarding file paths.
-chaos("my/", script, ".sqrl")
+chaos("my/", "file.sql")
 
-# While the query is running, an asterisk is
-# appended to the open-connection indicator on
-# the window title (in Windows only), which is
-# useful when you want to know if a hold-up is
-# on the remote server or in your subsequent R.
+# Submit a parameterised query from file.
+chaos("emissions.sqrl", make = "VEB", model = "Trabant 601")
 
-# Import a configuration file (see sqrlConfig).
-chaos("config", filepath)
+# Get information on source data types.
+chaos("typeinfo")
 
-# See your current configuration.
+# Get a list of source tables. 
+chaos("tables")
+
+# Get information on the columns of a particular table.
+chaos("columns", "my.table")
+}
+If necessary, a connection channel will be opened beforehand.
+The connection will remain open afterwards.
+
+If a file called (say) \dQuote{select 1} should exist, then
+\code{chaos("select 1")} submits the content of that file (rather than the
+apparent query).
+
+The \command{typeinfo}, \command{tables}, and \command{columns} commands are 
+simple wrappers to \code{\link[RODBC:sqlTypeInfo]{RODBC:sqlTypeInfo}}, 
+\code{\link[RODBC:sqlTables]{RODBC:sqlTables}}, and
+\code{\link[RODBC:sqlColumns]{RODBC:sqlColumns}} (respectively).
+}
+\section{Reviewing Settings}{
+\preformatted{
+# Get the value of one named parameter.
+chaos("uid")
+
+# List the values of all parameters.
 chaos("config")
+}
+Passwords are never returned.
+}
+\section{Setting Parameters}{
+\preformatted{
+# Enable visible indication of open connections.
+chaos("visible", TRUE)
 
+# Define the ping statement for the data source.
+chaos("ping", "use database")
+
+# Do not convert strings to factors.
+chaos("stringsAsFactors FALSE")
+
+# Set (opening and closing) table-name quotes.
+chaos(tabQuote = c("`", "'"))
+
+# Setting multiple parameters at once.
+chaos(as.is = TRUE, na.strings = c("NA", "-", ""))
+
+# Set one (named) parameter from a file.
+chaos("driver" = "path/to/file")
+
+# Import an entire configuration file.
+chaos("config", "path/", "to/", "file")
+}
+Calls of the form \code{chaos("name value")}, 
+\code{chaos("name", "value")}, \code{chaos("name", value)},
+\code{chaos(name = value)}, \code{chaos("name" = value)},
+\code{chaos(name = "value")} and \code{chaos("name" = "value")}
+are largely interchangeable.
+
+Assigning \var{visible} \code{TRUE} authorises modification of the global
+\code{prompt} option.
+When running \file{R.exe}, \file{Rterm.exe} or \file{Rgui.exe} on a
+\dQuote{Windows} operating system, this also authorises modification of the
+\R window title.
+}
+\section{Changing the Interface}{
+\preformatted{
 # Change the interface.
 chaos("interface", "K")
 
 # Change it back.
-K("interface", "chaos")
+K(interface = "chaos")
+}
+If the proposed new interface name already belongs to some other object within
+the \R search path, then the change request will be denied.
 
-# Call sqrlSources().
+A successful change deletes the previous interface.
+}
+\section{Listing Data Sources}{
+\preformatted{
+# See the data sources and their interfaces.
 chaos("sources")
-
-# Set your ping (similarly for other parameters).
-chaos("ping", "use database")
-
-# Set your password from file (similarly for other parameters).
-chaos("pwd", "password/file.txt")
-
-# View your (data source) username (similarly for other
-# parameters, except for your password).
-chaos("uid")
-
-# Set the colQuote parameter to NULL (similarly for tabQuote).
-chaos("colQuote", "NULL")
-
-# Add 'NULL' and '' to the RODBC na.strings list.
-chaos("na.string", "NULL")
-chaos("na.string", "")
-
-# Set the na.strings list to 'NA'.
-chaos("na.strings", "NA")
-
-# Get database information (simple RODBC wrappers).
-chaos("typeinfo")
-chaos("tables")
-chaos("columns", "my.table")
 }
+This is equivalent to calling \code{\link[SQRL:sqrlSources]{sqrlSources()}}.
 }
-\author{
-\packageAuthor{SQRL}
+\section{Getting Help}{
+\preformatted{
+# View these notes.
+chaos("help")
+
+# Alternative form.
+chaos("?")
+}
+The above are simply alternatives to \code{help(sqrlUsage)} and
+\code{?sqrlUsage}.
 }
 \seealso{
+\code{\link{sqrlAll}},
 \code{\link{sqrlConfig}},
 \code{\link{sqrlInterface}},
-\code{\link{sqrlOff}},
+\code{\link{sqrlParams}},
 \code{\link{sqrlScript}},
 \code{\link{sqrlSource}},
 \code{\link{sqrlSources}}
 }
-\keyword{ database }
-\keyword{ interface }
+\keyword{database}
+\keyword{interface}

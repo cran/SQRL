@@ -4,92 +4,98 @@
 Define New Data Sources
 }
 \description{
-Defines a new data source (or redefines an existing one), and creates an
-interface function for communicating with it.}
+Defines new data sources and creates the interface functions for communicating
+with them.
+Can also redefine existing sources.
+}
 \usage{
-sqrlSource(name = "", ...)
+sqrlSource(...)
 }
 \arguments{
-  \item{name}{
-A character string, to be used as the name of the data source and its interface.
-}
   \item{\dots}{
-One or more character strings, defining either a connection string, or the path
-to a configuration file (from which all parameters will be read).
+A name and definition for the source (refer to the details section, below).
 }
 }
 \details{
-Items in ... are pasted together with 'sep = ""'.
-If that results in the name of an existing data source, a copy of that source is
-made under the new name.
-If that results in the path to a 'SQRL' configuration file, then the source is defined from that.
-Otherwise, the items are concatenated into a semi-colon delimited connection
-string and the source is defined by that.
+The arguments may be specified as a single \var{name = definition} pair.
+In this usage, \var{definition} may be a connection string, a configuration
+file, a data source name (\acronym{DSN}), or the name of an existing \pkg{SQRL}
+source.
+In the case of a configuration file, the new source (\var{name}) is defined by
+importing all the parameter settings of that file (see
+\code{\link{sqrlConfig}}).
+In the case of an existing \pkg{SQRL} source, the new source is defined as a
+copy of the original.
+
+Alternatively, the arguments may be supplied as a list of strings.
+In this usage, the first string is taken for the new source name while the
+remainder comprise the definition (connection strings and file paths may be
+provided as components).
+
+Lastly, the arguments may instead be supplied as a single string followed by at
+least one \var{parameter = value} pair.
+In this usage, the string is taken for the new source name, and the pairs as
+components of the defining connection string (or \acronym{DSN}).
+
+Whichever form is used, the new source name must not conflict with that of any
+other object on the \R search path (or else an error will be thrown).
+Redefinition of an existing source is allowed, provided it is closed.
 }
-\value{
-Returns invisible NULL.
-}
-\author{
-\packageAuthor{SQRL}
+\value{for
+Returns invisible \code{NULL}, after creating an interface to the newly defined
+source.
 }
 \note{
-The defined source need not exist.
+Source definitions are not checked for validity (specified connection strings
+need not be correct, specified \acronym{DSN}s need not exist).
 
-Redefinition (overwriting) is allowed, although many (channel defining)
-parameters cannot be changed while the source is open.
-Attempting to alter one of these will produce an error.
+Connection strings may include placeholders; \dQuote{<dsn>}, \dQuote{<driver>},
+\dQuote{<uid>}, and \dQuote{<pwd>}, to be replaced with the corresponding
+parameter values on the opening of a channel.
+These placeholders are case sensitive (see \code{\link{sqrlParams}}).
 
-If a source has both a defined DSN (a non-empty 'dsn' parameter value) and a
-defined connection string (a non-empty 'connection' parameter value), then the
-string takes precedence (see '\link{sqrlConfig}').
-
-Components of the connection string are 'DSN', 'DBCName', 'Driver', 'UID',
-'Username' (an alias for 'UID'), 'PWD', and 'Password' (an alias for 'PWD').
-These are not case sensitive.
-Each of these may be defined as a (lower case only) placeholder; '<dsn>',
-'<dbcname>', '<driver>', '<uid>', and '<pwd>', to be substituted with the
-corresponding parameter values on the opening of a channel (see '\link{sqrlConfig}').
-
-Defining a connection string via 'DSN', rather than 'DBCName' and 'Driver', is
-not recommended in 'MySQL', since 'SQRL' will fail to identify the driver,
-leading to an incorrect colQuote (and forcing manual setting of that parameter).
-This problem should not occur when connecting to a 'MySQL' source via a locally
-registered DSN (rather than by a connection string).
-
-Use of usernames, driver names, etc., containing '=', ';', '{', or '}', is not
-recommended (and is prohibited on many systems).
-
-In 'Rgui', the minimum definition of the connection string is 'DBCName' and
-'Driver' (or 'DSN').
-The user should be prompted for 'UID' and 'PWD' when a channel is opened (a
-feature provided by 'RODBC').
-On other 'R's, 'UID' and 'PWD' should be included in the string (it is often
-preferable to do this in 'Rgui' as well).
-
-The (this) 'sqrlSource' function prohibits the use of a name that clashes with
-that of any other object on the search path, and will throw an error on such a
-conflict.
-A successful call of this function consequently guarantees the existence of 
-the named data source interface function.
-
-The interface can be changed after source definition, if mismatched (source,
-interface) names are required.
+In \file{Rgui.exe} (only), username and/or password credentials may be omitted
+from the connection string (because \pkg{RODBC} provides a facility, via the 
+\acronym{ODBC} driver,  prompting for that information when the channel is
+opened).
 }
 \seealso{
-\code{\link{sqrlConfig}}, \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}
+\code{\link{sqrlConfig}},
+\code{\link{sqrlParams}},
+\code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}
 }
 \examples{
-require(SQRL)
-sqrlSource("entropy",
-            "DBCName=EntSrvr;Driver=<driver>",
-            "UID=alfie;PWD=pass")
-sqrlSources()
-sqrlSource("entcopy", "entropy")
-sqrlSources()
+# Define a new source from a DSN.
+sqrlSource("daedalus", dsn = "Knossos")
+
+# Define another source as a copy of the former.
+sqrlSource(icarus = "daedalus")
+
+# Redefine an existing source by a connection string.
+# (This example is for a Windows-system client.)
+sqrlSource("icarus",
+            driver = "PostgreSQL ANSI(x64)",
+            server = "localhost",
+            port = 5432,
+            uid = "asterion",
+            pwd = "moo")
+
+# Define a new source by a connection string.
+# (This example is for a GNU/Linux-system client,
+#  and employs the <pwd> password placeholder.)
+sqrlSource("knossos",
+            "dbcname=Knossos;uid=theseus;pwd=<pwd>",
+            "driver=/opt/teradata/client/16.10/lib64/tdata.so")
 
 \dontrun{
-sqrlSource("entropy", "path/to/entropy.config")
-sqrlSource("entropy", "path/", "to/", otherfile, ".txt")
+# Define a new source from a configuration file.
+sqrlSource(minos = "path/to/minos.config")
+
+# Same thing, in an alternative form.
+sqrlSource("minos", "path/to/", "minos.config")
 }
+
+# Review defined sources.
+sqrlSources()
 }
-\keyword{ database }
+\keyword{database}
