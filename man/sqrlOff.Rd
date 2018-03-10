@@ -16,7 +16,7 @@ sqrlOff()
 Returns invisible \code{NULL}.
 }
 \note{
-Calls to \code{\link[RODBC:odbcCloseAll]{RODBC:odbcCloseAll}} will close any
+Calls to \code{\link[RODBC:odbcClose]{RODBC:odbcCloseAll}} will close any
 connection channels open in \pkg{SQRL}.
 }
 \seealso{

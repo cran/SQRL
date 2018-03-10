@@ -19,37 +19,29 @@
 
 #################################################################### HISTORY ###
 
-# 9 January 2018 -- 7 March 2018
-# Added kwarg support, including the ability to explicitly pass parameters to a
-# query script. Removed previously deprecated features. Added SqrlAll(),
-# SqrlDefault(), SqrlDefile(), and SqrlParams(). Three small bug fixes (config
-# file comment detection, empty R post-processing script handling, and
-# incorrect default username on GNU/Linux). Removed 'dbcname' from named
-# parameters (Teradata specific) and added (MySQL) 'user' as an alias for uid.
-# Documentation overhaul.
+# 10 March 2018.
+# Added 'path-valued' parameter list, exempt from SqrlDefile(). In v0.2.0, 
+# it was not possible to set the 'driver' parameter on GNU/Linux, since this
+# is a file path (which would be read, in the vain search for a 'driver').
 
-# 8 January 2018. CRAN release 0.1.1.
+# 9 March 2018. CRAN v0.2.0.
+# Added kwarg support, and the ability to explicitly pass parameters to .sqrl
+# scripts. Complete documentation overhaul.
 
-# 5 January 2018 -- 8 January 2018.
-# Patched help-files (examples) for compliance with 2018-01-04 build of R-devel
-# (3.5.0). Deprecated several features (better alternatives exist). Fixed a bug
-# in SqrlDelegate() call to RODBC::sqlColumns() (misspelled lexical argument).
+# 8 January 2018. CRAN v0.1.1.
+# Patched help files for compliance with R-devel-2018-01-05 (upcoming R-3.5).
+# (Specifically, removed example calls of SqrlOff().)
 
-# 12 November 2017. CRAN release 0.1.0.
+# 12 November 2017. CRAN v0.1.0.
+# Complete re-write for R-3.2+ (began on 30 August 2017). Dropped DBMS-specific
+# features and removed the need for ahead-of-time knowledge of sources. Changed
+# connection markers to invisible by default (since visibility requires altering
+# the user's prompt global option).
 
-# 30 August 2017 -- 10 November 2017.
-# R-3. Complete re-write. Same interface, different implementation, additional
-# capability. Dropped SQL version (vendor) specific features. Avoided the need
-# for ahead-of-time or build-time source knowledge. Changed connection markers
-# to invisible by default (since visibility means altering the user's prompt,
-# it's polite to get permission first; opt-in rather than opt-out.).
-
-# 15 April 2014 -- 12 June, 2014.
-# Packaged prototypes. Added support for multi-statement files with embedded R,
-# but inherited the SQL version and advanced (prior) knowledge requirements of
-# the prototype. Introduced stripping of comments from SQL prior to submission
-# (on the database of the time, too many comments at the beginning of a query
-# led to that query being rejected).
+# 15 April 2014 -- 12 June 2014. Packaged prototype.
+# Packaged (but not published). Added support for multi-statement SQL files with
+# embedded R. Introduced stripping of SQL comments prior to submission (on the
+# DBMS of the time, too many leading comments led to rejection of the query).
 
 # 7 January 2014.
 # R-2. Original (unpackaged script) prototype. Primary objectives were to
@@ -454,8 +446,8 @@ SqrlDefault <- function(datasource = "",
                     marker
                   },
     "wintitle"  = {
-                    marker <- base::paste("(", SqrlParam(datasource, "name"),
-                                          ")", sep = "")
+                    marker <- base::paste0("(", SqrlParam(datasource, "name"),
+                                            ")")
                     base::assign("wintitle", marker, cacheenvir)
                     marker
                   },
@@ -477,7 +469,7 @@ SqrlDefile <- function(parameter = "",
   #   A value for the parameter, either as supplied or as found within the
   #   supplied file (alternative).
   # SQRL Calls:
-  #   SqrlDefile() (self).
+  #   SqrlDefile() (self), SqrlParams().
   # SQRL Callers:
   #   SqrlConfig(), SqrlDefile() (self), SqrlDelegate().
   # User:
@@ -487,9 +479,11 @@ SqrlDefile <- function(parameter = "",
   #   may turn out to be unsuitable, but that is left for SqrlParam() to decide.
 
   # Return the unmodified value, if it is not of character type (SqrlPath()
-  # doesn't like NULL input) if it is the empty string (evaluates to NULL).
+  # doesn't like NULL input), if it is the empty string (evaluates to NULL),
+  # or if the parameter can be path-valued (in which case, we keep the path).
   if ((base::class(value) != base::class(base::character()))
-      || base::identical(value, ""))
+      || base::identical(value, "")
+      || (parameter %in% SqrlParams("path-valued")))
   {
     base::return(value)
   }
@@ -1391,10 +1385,12 @@ SqrlFile <- function(datasource = "",
           {
             if (base::length(base::dim(result)) == 2)
             {
-              base::print(result[1:base::min(base::nrow(result), 10), ])
+              base::print(result[
+                            base::seq(1, base::min(base::nrow(result), 10)), ])
             } else if (base::length(result) > 0)
             {
-              base::print(result[1:base::min(base::length(result), 10)])
+              base::print(result[
+                            base::seq(1, base::min(base::length(result), 10))])
             } else if (base::length(result) == 0)
             {
               base::print(result)
@@ -1500,8 +1496,7 @@ SqrlIndicator <- function(datasource = "",
     if (do.prompt)
     {
       indic <- SqrlParam(datasource, "prompt")
-      base::options(prompt =
-                        base::paste(indic, base::getOption("prompt"), sep = ""))
+      base::options(prompt = base::paste0(indic, base::getOption("prompt")))
     }
     # Return invisible NULL.
     base::return(base::invisible(NULL))
@@ -1527,7 +1522,7 @@ SqrlIndicator <- function(datasource = "",
           before <- base::sub("\\s+$", "",
                                 base::substring(windowtitle, 1, position - 1))
           after <- base::substring(windowtitle, position + base::nchar(indic))
-          utils::setWindowTitle(title = base::paste(before, after, sep = ""))
+          utils::setWindowTitle(title = base::paste0(before, after))
         }
       }
     }
@@ -1554,7 +1549,7 @@ SqrlIndicator <- function(datasource = "",
     {
       indic <- SqrlParam(datasource, "wintitle")
       utils::setWindowTitle(title =
-                            base::sub(indic, base::paste(indic, "*", sep = ""),
+                            base::sub(indic, base::paste0(indic, "*"),
                                       utils::getWindowTitle(), fixed = TRUE))
     }
     base::return(base::invisible(NULL))
@@ -1569,7 +1564,7 @@ SqrlIndicator <- function(datasource = "",
     {
       indic <- SqrlParam(datasource, "wintitle")
       utils::setWindowTitle(title =
-                            base::sub(base::paste(indic, "*", sep = ""), indic,
+                            base::sub(base::paste0(indic, "*"), indic,
                                       utils::getWindowTitle(), fixed = TRUE))
     }
     base::return(base::invisible(NULL))
@@ -1613,8 +1608,8 @@ SqrlInterface <- function(datasource = "",
   #   (singleton), but it is not assured to be usable (that is checked here).
 
   # This is the user-interface function-body definition for the data source.
-  uibody <- base::paste("function(...) {base::return(SqrlDelegate(\"",
-              datasource, "\", ..., envir = base::parent.frame()))}", sep = "")
+  uibody <- base::paste0("function(...) {base::return(SqrlDelegate(\"",
+                        datasource, "\", ..., envir = base::parent.frame()))}")
 
   # Isolate the previous interface (NULL when no interface was defined).
   preface <- SqrlParam(datasource, "interface")
@@ -1912,7 +1907,7 @@ SqrlOpen <- function(datasource = "")
   {
     for (param in SqrlParams("substitutable"))
     {
-      connection <- base::gsub(base::paste("<", param, ">", sep = ""),
+      connection <- base::gsub(base::paste0("<", param, ">"),
                                 SqrlParam(datasource, param),
                                 connection, fixed = TRUE)
     }
@@ -1977,7 +1972,7 @@ SqrlOpen <- function(datasource = "")
   cstrings <- base::unlist(base::strsplit(cstring, ';'))
   for (param in SqrlParams("scrapeable-channel"))
   {
-    pattern <- base::paste("^", param, "=", sep = "")
+    pattern <- base::paste0("^", param, "=")
     matches <- base::grepl(pattern, cstrings, ignore.case = TRUE)
     if (base::any(matches))
     {
@@ -2190,10 +2185,9 @@ SqrlParam <- function(datasource = "",
       # as well attempt to extract some other parameter values, too.
       for (param in SqrlParams("scrapeable-string"))
       {
-        if (base::grepl(base::paste(param, "\\s*=", sep = ""),
-                        set, ignore.case = TRUE))
+        if (base::grepl(base::paste0(param, "\\s*="), set, ignore.case = TRUE))
         {
-          assignee <- base::paste("^.*", param, "\\s*=", sep = "")
+          assignee <- base::paste0("^.*", param, "\\s*=")
           value <- base::sub(assignee, "", set, ignore.case = TRUE)
           value <- base::trimws(base::sub(";.*$", "", value))
           # 'user' and 'username' are connection string aliases for 'uid'.
@@ -2208,7 +2202,7 @@ SqrlParam <- function(datasource = "",
           # SQRL accepts <uid> (etc.) as connection string template place
           # holders (to be replaced with current values at connection time).
           # We don't want to override default or previous values with these.
-          if (value != base::paste("<", param, ">", sep = ""))
+          if (value != base::paste0("<", param, ">"))
           {
             SqrlParam(datasource, param, value)
           }
@@ -2307,8 +2301,8 @@ SqrlParams <- function(group = "")
   # SQRL Calls:
   #   None.
   # SQRL Callers:
-  #   SqrlConfig(), SqrlDelegate(), SqrlDSNs(), SqrlOpen(), SqrlParam(),
-  #   SqrlSource(), SqrlSources().
+  #   SqrlConfig(), SqrlDefile(), SqrlDelegate(), SqrlDSNs(), SqrlOpen(),
+  #   SqrlParam(), SqrlSource(), SqrlSources().
   # User:
   #   Has no direct access, and is unable to supply the argument. Validity
   #   checks are not required.
@@ -2387,6 +2381,9 @@ SqrlParams <- function(group = "")
                                       "rows_at_time",
                                       "tabQuote",
                                       "uid"),
+
+    # Parameters that can be file-path valued (excluded from SqrlDefile()).
+    "path-valued"           = base::c("driver"),
 
     # Aliases for 'pwd' (within the 'scrapeable-string' parameter set).
     "pwd-aliases"           = base::c("password"),
@@ -2492,7 +2489,7 @@ SqrlPath <- function(...)
   #   SqrlDelegate(). There are no restrictions on these (no checks required).
 
   # Paste all arguments together.
-  filepath <- base::paste(..., sep = "", collapse = "")
+  filepath <- base::paste0(..., collapse = "")
 
   # If the filepath does not have length one, then it cannot specify a file.
   if ((base::length(filepath) != 1)
@@ -2689,7 +2686,7 @@ SqrlSource <- function(...)
   # If def names an existing data source, make our new source a duplicate of it.
   # (Copy (almost) all non-default parameter values from the original (<def>)
   # data source's cache, to the new (<name>) data source's cache.)
-  datasource <- base::paste(def, sep = "", collapse = "")
+  datasource <- base::paste0(def, collapse = "")
   if (SqrlCache(datasource, exists = TRUE))
   {
     params <- SqrlParam(datasource, "*")
@@ -2712,9 +2709,8 @@ SqrlSource <- function(...)
     if (!base::is.null(base::names(def)))
     {
       lex <- base::names(def)
-      lex[base::nchar(lex) > 0] <- base::paste(lex[base::nchar(lex) > 0], "=",
-                                                sep = "")
-      def <- base::as.list(base::paste(lex, def, sep = ""))
+      lex[base::nchar(lex) > 0] <- base::paste0(lex[base::nchar(lex) > 0], "=")
+      def <- base::as.list(base::paste0(lex, def))
     }
 
     # Concatenate to a single semi-colon delimited string (each of the terms
@@ -2988,7 +2984,7 @@ SqrlSubScript <- function(datasource = "",
       {
         if (base::class(result) == base::class(base::data.frame()))
         {
-          base::print(result[1:base::min(base::nrow(result), 10), ])
+          base::print(result[base::seq(1, base::min(base::nrow(result), 10)), ])
         } else
         {
           base::print(result)
