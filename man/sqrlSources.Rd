@@ -18,6 +18,7 @@ If set to one of \dQuote{all}, \dQuote{user}, or \dQuote{system}, then a call is
 made to \code{\link[RODBC:odbcDataSources]{RODBC:odbcDataSources}} (with the
 corresponding \var{type} value) to re-examine that class of data source names
 (\acronym{DSN}s) and import all those found.
+If set to \dQuote{remove}, then all currently defined sources are deregistered. 
 }
 }
 \value{
@@ -38,6 +39,7 @@ They can be manually added via \code{\link{sqrlSource}}.
 \code{\link[RODBC:odbcDataSources]{RODBC:odbcDataSources}}
 }
 \examples{
+# Review defined sources.
 sqrlSources()
 
 \dontrun{
@@ -53,6 +55,12 @@ sqrlSources()
 # that name is prevented due to its conflicting with the 
 # base:order function). Neither source (channel) is open.
 }
+
+# Remove all sources.
+sqrlSources("remove")
+
+# Reload user DSNs.
+sqrlSources("user")
 }
 \keyword{database}
 \keyword{interface}

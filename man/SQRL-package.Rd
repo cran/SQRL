@@ -8,8 +8,8 @@
 \description{
 Wrapper of convenience about \pkg{RODBC}.
 Supports parameterised multi-statement \acronym{SQL} scripts with embedded \R.
-Generates like-named user-interfaces for \acronym{ODBC} (Open Database
-Connectivity) data sources.
+Generates like-named user-interfaces for Open Database Connectivity
+(\acronym{ODBC}) data sources.
 Implicitly manages connection handles and communication parameters.
 Provides visual indication of open channels and queries in progress.
 Detects lost connections and attempts recovery.
@@ -44,8 +44,8 @@ sqrlSource("mysource",
             user = "<uid>",
             password = "<pwd>")
 
-# Obtain help on usage.
-mysource("help")
+# Obtain help on usage (in text format).
+mysource("help", "text")
 
 \dontrun{
 # Submit a query to the new source.

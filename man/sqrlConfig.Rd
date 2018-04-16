@@ -39,6 +39,7 @@ stringsAsFactors    = FALSE
 
 # Parameters for SQRL.
 driver              = "{IBM DB2 ODBC DRIVER}"
+interface           = "Q"
 ping                = "select 1 from dual"
 verbose             = FALSE
 visible             = TRUE
@@ -50,8 +51,9 @@ wintitle            = "(Quag)"
 This is a sample configuration file, exhibiting all parameters.
 In general, a file need not include all of these (default values are in place).
 
-Parameters may be defined as the path to some other file (from which the value
-will be read).
+Parameters may be defined as the path to some other file.
+The \var{driver} and \var{dsn} parameters will take paths as their values.
+For all other parameters, a value will be read from within the file.
 Such files may contain only a single line with only the one parameter value on
 it, or they may adhere to the full (multiple) \sQuote{parameter = value} format.
 Unexpected results may occur should a file called (say) \dQuote{TRUE} exist.

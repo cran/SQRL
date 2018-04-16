@@ -6,7 +6,7 @@ Define New Data Sources
 \description{
 Defines new data sources and creates the interface functions for communicating
 with them.
-Can also redefine existing sources.
+Can also redefine and/or delete existing sources.
 }
 \usage{
 sqrlSource(...)
@@ -38,8 +38,15 @@ In this usage, the string is taken for the new source name, and the pairs as
 components of the defining connection string (or \acronym{DSN}).
 
 Whichever form is used, the new source name must not conflict with that of any
-other object on the \R search path (or else an error will be thrown).
+other object on the \R search path (or else an error will be thrown), unless
+the source is being defined from a configuration file that defines an interface
+name (in which case, that name may not conflict with any object already on the
+search path). 
 Redefinition of an existing source is allowed, provided it is closed.
+
+When the name is \sQuote{remove}, the definition is interpreted as a list of
+sources to be deregistered.
+This precludes the use of \sQuote{remove} as a source name.
 }
 \value{for
 Returns invisible \code{NULL}, after creating an interface to the newly defined
@@ -91,11 +98,16 @@ sqrlSource("knossos",
 # Define a new source from a configuration file.
 sqrlSource(minos = "path/to/minos.config")
 
-# Same thing, in an alternative form.
-sqrlSource("minos", "path/to/", "minos.config")
+# Source names may conflict with those of preexisting
+# R objects, provided that the config file defines a 
+# conflict-free name for the source's interface function.
+sqrlSource("c", "path/to/", "c.config")
 }
 
 # Review defined sources.
 sqrlSources()
+
+# Remove two of the sources.
+sqrlSource("remove", c("daedalus", "knossos")) 
 }
 \keyword{database}

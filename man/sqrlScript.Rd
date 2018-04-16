@@ -61,7 +61,7 @@ that \acronym{SQL} syntax highlighting can be better applied to the file.
 \R comments are not allowed within \acronym{SQL} sections
 
 Nested \acronym{SQL} queries can be made from within \code{<R> ... </R>} tags.
-However, \code{<R> ... </R>} tags cannot be nested themselves.
+However, \code{<R> ... </R>} tags cannot be nested.
 }
 }
 \section{Example Script #3}{
@@ -96,7 +96,7 @@ and columnB < <R> z <- 5; z + 2 </R>
 <result -> x>
 
 -- Only the result of the final operation
--- is returned on the end of the script.
+-- is returned at the end of the script.
 return(list(minA = min(x$columnA),
             maxB = max(x$columnB))
 }
@@ -117,7 +117,7 @@ manipulation used as part of a subsequent \acronym{SQL} query.
 With the exception of the name of the target (assignment) variable within a
 \code{result} tag, tags are not case sensitive.
 When the name of the target variable is either \dQuote{null} or \dQuote{NULL},
-then the query result is not assigned into the working environment (like with a 
+then the query result is not assigned into the working environment (as with a 
 \code{<do>} tag), but the subsequent script is still interpreted as \R (unlike
 with a \code{<do>} tag).
 
@@ -128,11 +128,8 @@ Only the final result is returned to the calling environment.
 }
 \section{Example Script #4}{
 \preformatted{
--- Empty query, nothing submitted.
--- Don't assign the result.
-<result -> null>
-
--- Set temporary R variables here.
+-- R sections can be used to set temporary variables.
+<R>
 columns <- list("columnA", "columnB")
 wordlist <- list("'red'", "'blue'")
 conditions <- c("and columnA < 2", "and columnD > 4")
@@ -153,7 +150,16 @@ where
   and columnA > 0
 }
 \subsection{Commentary on Example Script #4}{
-To set \R variables prior to submitting any \acronym{SQL}, use an empty query.
+Whereas \code{<R> ... </R>} sections are embedded within \acronym{SQL} (which
+may be blank), \code{<R> ... <do>} sections exist outside of any \acronym{SQL}.
+While the result of an \code{<R> ... </R>} section is substituted back into the
+surrounding \acronym{SQL} (and will form part of the query), an
+\code{<R> ... <do>} section is simply evaluated within the script's working
+environment.
+Although a \code{<result -> null> ... <do>} section may be preceded by
+\acronym{SQL} (which will be submitted prior to evaluating the section), an
+\code{<R> ... <do>} section may not be (the two sections being otherwise
+equivalent).
 
 Lists are inserted comma collapsed.
 Vectors are inserted newline collapsed.

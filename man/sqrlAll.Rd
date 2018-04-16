@@ -41,5 +41,8 @@ sqrlAll(visible = TRUE)
 
 # Close all open channels.
 sqrlAll("close")
+
+# Remove all defined sources.
+sqrlAll("remove")
 }
 \keyword{misc}

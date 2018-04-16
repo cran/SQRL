@@ -73,6 +73,8 @@ dependent.
 Overrides \var{dsn}, should both be defined.
 Locked while the connection is open.
 Defaults to the empty string (connect via \acronym{DSN} instead).
+Setting \var{connection} resets \var{dsn}, unless \var{connection} contains the 
+\dQuote{<dsn>} placeholder.
 }
 \item{\var{DBMSencoding}:}{
 A character string.
@@ -91,8 +93,8 @@ The default value is \code{options("dec")}, as set by \pkg{RODBC}.
 
 \item{\var{driver}:}{
 A character string.
-The name or path of the \acronym{ODBC} driver for the source (either currently
-in use, or to be used when a channel is opened).
+The name or file path of the \acronym{ODBC} driver for the source (either
+currently in use, or to be used when a channel is opened).
 This determines the requisite dialect of \acronym{SQL}.
 Locked while the connection channel is open.
 Defaults to the empty string.
@@ -102,8 +104,11 @@ Defaults to the empty string.
 A character string.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
 Specifies the data source name (\acronym{DSN}) to connect to.
+Can be a file path.
 Overridden by \var{connection}, when that parameter is defined.
 Locked while the connection is open.
+Setting \var{dsn} resets \var{connection}, unless \var{connection} contains the 
+\dQuote{<dsn>} placeholder.
 }
 \item{\var{errors}:}{
 A logical singleton.
@@ -248,13 +253,14 @@ A character string, possibly empty.
 Defines an indicator that, unless empty, is displayed on the \R window title bar
 while a connection channel is open to the source, and provided \var{visible} is
 \code{TRUE}.
-An asterisk is appended to the indicator while a query is running on the source,
-or results are being retrieved from it.
+An asterisk (*) is appended to the indicator while a query is running on the
+source (including connection-testing pings), and a plus-sign (+) is appended
+while results are being retrieved from it.
 If two sources are open and one indicator is a substring of the other, then
 \pkg{SQRL} may fail to correctly update the title when one source is closed.
 Only works with \file{R.exe}, \file{Rterm.exe} and \file{Rgui.exe}, and then
 only while running on a \dQuote{Windows} operating system.
-Does not work with \dQuote{R Studio}.
+Does not work with \dQuote{RStudio}.
 }
 }
 }
