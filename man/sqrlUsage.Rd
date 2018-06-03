@@ -61,6 +61,9 @@ chaos("emissions.sqrl", make = "VEB", model = "Trabant 601")
 If necessary, a connection channel will be opened beforehand.
 The connection will remain open afterwards.
 
+When a query returns no data (as would \sQuote{use database}), the interface
+function returns invisibly.
+
 If a file called (say) \file{use database} should exist, then
 \code{chaos("use database")} submits the content of that file (rather than the
 apparent command).
@@ -96,6 +99,7 @@ chaos()$uid
 chaos("config")
 }
 Passwords are returned obliterated.
+The output format of \dQuote{source} is likely to change with the next release. 
 }
 \section{Setting Parameters}{
 \preformatted{

@@ -54,6 +54,10 @@ sqrlSources()
 # No interface has yet been defined for 'order' (use of
 # that name is prevented due to its conflicting with the 
 # base:order function). Neither source (channel) is open.
+
+# Contents of the 'uid' column can be incorrect when the
+# UID is contained within a DSN. As such, this column is
+# likely to be absent in the next release.
 }
 
 # Remove all sources.

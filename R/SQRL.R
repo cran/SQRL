@@ -19,7 +19,13 @@
 
 #################################################################### HISTORY ###
 
-# 15 April 2018.
+# 4 June 2018.
+# No longer supplies the default UID when connecting via DSN, as this overrides
+# any possible UID already contained within the DSN. SQL submissions to sources
+# now return invisibly when the result is not a data frame (such as that of 'use
+# database'). Added interface()$ispoen and interface()$source.
+
+# 16 April 2018. CRAN v0.3.0.
 # Implemented run-time-generated help for interface functions. Activated source
 # deregistration and parameter resetting. Allowed configuration files to specify
 # the interface function. Improved password protection. Support for <R> ... <do>
@@ -615,11 +621,16 @@ SqrlDelegate <- function(datasource = "",
   # else. Returns the configuration invisibly, enabling interface()$parameter.
   if (args.count == 0)
   {
-    if (!SqrlIsOpen(datasource, besure = TRUE))
+    isopen <- SqrlIsOpen(datasource, besure = TRUE)
+    if (!isopen)
     {
       SqrlOpen(datasource)
+      isopen <- SqrlIsOpen(datasource)
     }
-    base::return(base::invisible(SqrlConfig(datasource)))
+    config <- SqrlConfig(datasource)
+    config[["source"]] <- SqrlValue(datasource, "source")
+    config[["isopen"]] <- isopen
+    base::return(base::invisible(config[base::order(base::names(config))]))
   }
 
   # Obtain the stated names of the supplied arguments. This may be NULL (no
@@ -641,7 +652,7 @@ SqrlDelegate <- function(datasource = "",
 
     # Extract the first word from the first supplied argument.
     first.word <- base::sub("^[^[:graph:]]*([[:graph:]]+).*$", "\\1",
-                            args.list[[1]])
+                            args.list[[1]])[1]
 
     # If the first word looks like standard SQL, submit the unaltered command.
     if (base::tolower(first.word) %in% SqrlParams("sql-keywords"))
@@ -751,27 +762,11 @@ SqrlDelegate <- function(datasource = "",
       base::return(SqrlParam(datasource, first.word, other.words))
     }
 
-    # If the only word is 'source', apply the same logic as SqrlOpen() to decide
-    # between a DSN and string connection. In the case of the latter, substitute
-    # all placeholders and protect any passwords. Return the source definition.
+    # If the only word is source, return the (placeholder substituted, secrets
+    # obliterated) source definition (either a DSN or a connection string).
     if ("source" == only.word)
     {
-      connection <- base::as.character(SqrlParam(datasource, "connection"))
-      if (base::nchar(connection) > 0)
-      {
-        for (param in SqrlParams("substitutable"))
-        {
-          connection <- base::gsub(base::paste0("<", param, ">"),
-                                    SqrlValue(datasource, param),
-                                    connection, fixed = TRUE)
-        }
-        connection <- SqrlValue("", "connection", connection)
-        base::names(connection) <- "connection"
-        base::return(connection)
-      }
-      dsn <- base::as.character(SqrlParam(datasource, "dsn"))
-      base::names(dsn) <- "dsn"
-      base::return(dsn)
+      base::return(SqrlValue(datasource, "source"))
     }
 
     # If the command is 'sources', return the data source summary table.
@@ -2268,7 +2263,7 @@ SqrlOpen <- function(datasource = "")
   # SQRL Calls:
   #   SqrlIsOpen(), SqrlParam(), SqrlParams(), SqrlPing().
   # RODBC Calls:
-  #   odbcConnect(), odbcDriverConnect().
+  #   odbcConnect(), odbcDriverConnect()
   # SQRL Callers:
   #   SqrlDelegate(), SqrlSubmit().
   # User:
@@ -2283,8 +2278,8 @@ SqrlOpen <- function(datasource = "")
 
   # RODBC will prompt the user (via dialog box) for missing information (uid,
   # pwd, etc.) only in Rgui. In Rterm, RStudio, etc., pwd must be contained in
-  # the connection string, and/or the pwd parameter must be set, prior to making
-  # a connection attempt. Otherwise, a (connection failure) error will result.
+  # the DSN or connection string, or the pwd parameter must be set, prior to
+  # attempting to connect. Otherwise, a (connection failure) error will result.
 
   # If a connection string has been defined for this source, connect using that.
   connection <- base::as.character(SqrlParam(datasource, "connection"))
@@ -2298,32 +2293,50 @@ SqrlOpen <- function(datasource = "")
     }
     channel <- base::try(
                 RODBC::odbcDriverConnect(
-                connection = connection,
-                case = SqrlParam(datasource, "case"),
-                believeNRows = SqrlParam(datasource, "believeNRows"),
-                colQuote = SqrlParam(datasource, "colQuote"),
-                tabQuote = SqrlParam(datasource, "tabQuote"),
-                interpretDot = SqrlParam(datasource, "interpretDot"),
-                DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
-                rows_at_time = SqrlParam(datasource, "rows_at_time"),
-                readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
+                  connection = connection,
+                  case = SqrlParam(datasource, "case"),
+                  believeNRows = SqrlParam(datasource, "believeNRows"),
+                  colQuote = SqrlParam(datasource, "colQuote"),
+                  tabQuote = SqrlParam(datasource, "tabQuote"),
+                  interpretDot = SqrlParam(datasource, "interpretDot"),
+                  DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
+                  rows_at_time = SqrlParam(datasource, "rows_at_time"),
+                  readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
 
   # Otherwise (no string), connect using the registered data source name (DSN).
   } else
   {
+    # If a user-ID and/or password has been defined, use the defined value (this
+    # overrides any corresponding value that may be defined within the DSN).
+    # Otherwise, use '' (rather than the default values), which causes RODBC to
+    # go with any values in the DSN (and to ask for missing values in Rgui).
+    # We can't just send the default values, because these will override any
+    # corresponding values on the DSN (which is unlikely to be the preferred
+    # behaviour). We do still want a non-empty default user-id, since this is
+    # useful when connecting via a string incorporating the <uid> placeholder.
+    uid <- ""
+    pwd <- ""
+    if (SqrlParam(datasource, "uid", isdefined = TRUE))
+    {
+      uid <- SqrlParam(datasource, "uid")
+    }
+    if (SqrlParam(datasource, "pwd", isdefined = TRUE))
+    {
+      pwd <- SqrlParam(datasource, "pwd")
+    }
     channel <- base::try(
                 RODBC::odbcConnect(
-                dsn = SqrlParam(datasource, "dsn"),
-                uid = SqrlParam(datasource, "uid"),
-                pwd = SqrlParam(datasource, "pwd"),
-                case = SqrlParam(datasource, "case"),
-                believeNRows = SqrlParam(datasource, "believeNRows"),
-                colQuote = SqrlParam(datasource, "colQuote"),
-                tabQuote = SqrlParam(datasource, "tabQuote"),
-                interpretDot = SqrlParam(datasource, "interpretDot"),
-                DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
-                rows_at_time = SqrlParam(datasource, "rows_at_time"),
-                readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
+                  dsn = SqrlParam(datasource, "dsn"),
+                  uid = uid,
+                  pwd = pwd,
+                  case = SqrlParam(datasource, "case"),
+                  believeNRows = SqrlParam(datasource, "believeNRows"),
+                  colQuote = SqrlParam(datasource, "colQuote"),
+                  tabQuote = SqrlParam(datasource, "tabQuote"),
+                  interpretDot = SqrlParam(datasource, "interpretDot"),
+                  DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
+                  rows_at_time = SqrlParam(datasource, "rows_at_time"),
+                  readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
   }
 
   # Halt and notify on failure to connect. Might just be an incorrect password,
@@ -2344,15 +2357,12 @@ SqrlOpen <- function(datasource = "")
   }
 
   # Scrape uid, dsn, and driver from the channel's connection attribute (in case
-  # the user should have entered something new). The systems available for
-  # testing (this) on do not permit use of '=', ';', '{', or '}' within any of
-  # these parameters. The cstrings splitting operation (below) is likely to
-  # yield incorrect results on any system that does allow these characters (and
-  # when such characters are used). Do such systems exist? It doesn't matter if
-  # these characters appear in a password, since that is neither present in the
-  # connection attribute, nor scraped from it. Mis-scraping will not kill the
+  # the user should have entered something new). Mis-scraping will not kill the
   # open channel, but it will produce an incorrect view in SqrlConfig(), and
-  # will prevent network drop-out recovery in SqrlSubmit().
+  # will prevent network drop-out recovery in SqrlSubmit(). We blank the uid
+  # parameter first, because if it does not appear in the channel's connection
+  # string, then it could be anything (when contained within a DSN, perhaps).
+  SqrlParam(datasource, "uid", "", override = TRUE)
   cstring <- base::attr(channel, "connection.string")
   cstrings <- base::unlist(base::strsplit(cstring, ';'))
   for (param in SqrlParams("scrapeable-channel"))
@@ -2383,7 +2393,8 @@ SqrlOpen <- function(datasource = "")
 SqrlParam <- function(datasource = "",
                       parameter = "",
                       set,
-                      override = FALSE)
+                      override = FALSE,
+                      isdefined = NULL)
 {
   # Gets and sets named SQRL/RODBC control parameters for a data source.
   # Args:
@@ -2391,6 +2402,7 @@ SqrlParam <- function(datasource = "",
   #   parameter  : The name of a SQRL or RODBC control parameter.
   #   set        : The value to assign to that parameter (optional).
   #   override   : If set to TRUE, open status does not block value changes.
+  #   isdefined  : If set to TRUE, return whether or not a value is defined.
   # Returns:
   #   The value of the named parameter for the named data source. If the set
   #   argument is specified, then the new value is returned (invisibly) after
@@ -2414,6 +2426,14 @@ SqrlParam <- function(datasource = "",
 
   # Obtain a handle to the data source's SQRL cache.
   cacheenvir <- SqrlCache(datasource)
+
+  # When the defined flag is either TRUE or FALSE, return only whether or not a
+  # (default-overriding) value has been set (exists) for the parameter.
+  if (!base::is.null(isdefined))
+  {
+    base::return(base::exists(parameter, cacheenvir, inherits = FALSE)
+                  == isdefined)
+  }
 
   # When the parameter is 'reset', the set argument should be a vector of
   # parameter names for which the default values are to be restored.
@@ -2441,23 +2461,27 @@ SqrlParam <- function(datasource = "",
     # change any visible indicators (if those parameters are to be reset).
     if (SqrlIsOpen(datasource))
     {
-      if (base::any(params %in% SqrlParams('locked-while-open')))
+      if (!override
+          && base::any(params %in% SqrlParams('locked-while-open')))
       {
         base::stop("Cannot reset parameter while connection is open.")
       }
       if ("visible" %in% params)
       {
-        SqrlParam(datasource, "visible", SqrlDefault(datasource, "visible"))
+        SqrlParam(datasource, "visible",
+                  SqrlDefault(datasource, "visible"), override)
       }
       if (SqrlParam(datasource, "visible"))
       {
         if ("prompt" %in% params)
         {
-          SqrlParam(datasource, "prompt", SqrlDefault(datasource, "prompt"))
+          SqrlParam(datasource, "prompt",
+                    SqrlDefault(datasource, "prompt"), override)
         }
         if ("wintitle" %in% params)
         {
-          SqrlParam(datasource, "wintitle", SqrlDefault(datasource, "wintitle"))
+          SqrlParam(datasource, "wintitle",
+                    SqrlDefault(datasource, "wintitle"), override)
         }
       }
     }
@@ -2636,7 +2660,7 @@ SqrlParam <- function(datasource = "",
       # delete any dsn definition.
       if (!base::grepl("<dsn>", set))
       {
-        SqrlParam(datasource, "reset", "dsn")
+        SqrlParam(datasource, "reset", "dsn", override)
       }
       # RODBC::odbcConnect() likes to know the driver (from which it determines
       # whether or not it's dealing with MySQL). While we're doing that, we may
@@ -2662,7 +2686,7 @@ SqrlParam <- function(datasource = "",
           # We don't want to override default or previous values with these.
           if (value != base::paste0("<", param, ">"))
           {
-            SqrlParam(datasource, param, value)
+            SqrlParam(datasource, param, value, override)
           }
         }
       }
@@ -2675,7 +2699,7 @@ SqrlParam <- function(datasource = "",
         dsn <- SqrlParam(datasource, "dsn")
         if (dsn %in% base::names(sources))
         {
-          SqrlParam(datasource, "driver", sources[dsn])
+          SqrlParam(datasource, "driver", sources[dsn], override)
         }
       }
       # Set the (unaltered) connection string, return invisibly.
@@ -2689,7 +2713,7 @@ SqrlParam <- function(datasource = "",
     {
       if (!base::grepl("<dsn>", SqrlParam(datasource, "connection")))
       {
-        SqrlParam(datasource, "reset", "connection")
+        SqrlParam(datasource, "reset", "connection", override)
       }
       base::assign(parameter, set, cacheenvir)
       base::return(base::invisible(set))
@@ -3364,7 +3388,7 @@ SqrlSubmit <- function(datasource = "",
   #   SqrlIndicator(), SqrlIsOpen(), SqrlOpen(), SqrlParam(), SqrlStatement(),
   #   SqrlSubmit() (self).
   # RODBC Calls:
-  #   sqlQuery().
+  #   sqlGetResults(), sqlQuery().
   # SQRL Callers:
   #   SqrlDelegate(), SqrlIsOpen(), SqrlPing(), SqrlSubmit() (self),
   #   SqrlSubScript().
@@ -3427,20 +3451,26 @@ SqrlSubmit <- function(datasource = "",
   # possibly empty). On error, RODBC::sqlQuery() returns a character vector of
   # error messages (always with at least two elements, it seems) or an integer
   # (either -1 or -2). From R, see ?RODBC::sqlQuery. This detects such errors.
+  # It might be preferable to call RODBC::sqlQuery() with errors = FALSE (which
+  # unambiguously returns -1 on an error), and then retrieve the error message
+  # via RODBC::odbcGetErrMsg(), but this function is 'likely to be confined to
+  # the RODBC namespace in the near future' (according to the RODBC manual).
   srcerr <- ((base::class(result) == base::class(base::integer()))
               || ((base::class(result) == base::class(base::character()))
                     && (base::length(result) > 1)))
 
-  # If there was an error, and the retry flag is set (to TRUE), and we have a
-  # stored password (with which to reconnect to the data source), and a double
+  # If there was an error, and the retry flag is set (to TRUE), and a double
   # check of the connection channel's open status (this time, with a ping of
   # the data source) reveals that it's actually closed, then we infer that the
   # channel was likely closed by the source and submit the statement one more
   # time (only). This call of SqrlSubmit() will attempt to reopen the channel.
   # This provides a (very) limited ability to recover from network drop-outs.
+  # It is possible this recovery attempt will prompt the user for a password.
+  # We are unable to distinguish between not knowing the password (not defined
+  # within SQRL), the password being contained within a DSN (which may form
+  # part of a connection string), or some kind of network authentication.
   if (srcerr
       && retry
-      # && (base::nchar(SqrlParam(datasource, "pwd")) > 0)
       && !SqrlIsOpen(datasource, besure = TRUE))
   {
     base::return(SqrlSubmit(datasource, ..., throw = throw, retry = FALSE))
@@ -3448,13 +3478,27 @@ SqrlSubmit <- function(datasource = "",
 
   # RODBC::sqlQuery() doesn't (often) throw proper errors (when these occur on
   # the data source side). Instead, it returns the error messages (as sent from
-  # the data source). Trap and throw these (as fatal errors), unless the throw
-  # argument and the error parameter are both FALSE.
+  # the data source) as a character vector. Trap and throw these (as fatal
+  # errors), unless the throw argument and the error parameter are both FALSE.
+  # Possible RODBC::sqlQuery() (& RODBC::sqlGetResults()) Return Values: On
+  # success, a data frame (possibly with 0 rows) or a character string. On
+  # failure, if errors = TRUE a character vector of message(s), otherwise an
+  # invisible integer error code -1 (general, call odbcGetErrMsg for details)
+  # or -2 (no data; which may not be an error. as some SQL statements do return
+  # no data).
   if (srcerr
       && (throw
           || SqrlParam(datasource, "errors")))
   {
     base::stop(base::paste(result, collapse = "\n"))
+  }
+
+  # When the result is not a data frame, there won't be any more rows to fetch,
+  # so return it invisibly (it should be a character string, likely indicating
+  # 'No data', or some such thing.
+  if (base::class(result) != base::class(base::data.frame()))
+  {
+    base::return(base::invisible(result))
   }
 
   # Everything appears to have gone smoothly. If the maximum total number of
@@ -3491,7 +3535,26 @@ SqrlSubmit <- function(datasource = "",
   # Remove fetch-in-progress indicator from the window title.
   SqrlIndicator(datasource, "done")
 
-  # Bind rows (to that from RODBC::sqlQuery()), and return the full result.
+  # If RODBC::sqlGetResults() appears to have returned an error (message or
+  # code) and throw is TRUE, then stop with an exception. Otherwise, if the
+  # function did not return a data frame (something seems to have gone wrong),
+  # return that something invisibly. The logic here could perhaps be simplified.
+  srcerr <- ((base::class(restof) == base::class(base::integer()))
+              || ((base::class(restof) == base::class(base::character()))
+                    && (base::length(restof) > 1)))
+  if (srcerr
+      && (throw
+          || SqrlParam(datasource, "errors")))
+  {
+    base::stop(base::paste(restof, collapse = "\n"))
+  }
+  if (base::class(restof) != base::class(base::data.frame()))
+  {
+    base::return(base::invisible(restof))
+  }
+
+  # RODBC::sqlQuery() and RODBC::sqlGetRows() have both returned data frames.
+  # Bind them together (RODBC::sqlQuery() first), and return the full result.
   base::return(base::rbind(result, restof))
 }
 
@@ -3613,9 +3676,9 @@ SqrlValue <- function(datasource = "",
   # Returns:
   #   The edited parameter value (with secrets kept secret).
   # SQRL Calls:
-  #   SqrlParam(), SqrlParams().
+  #   SqrlParam(), SqrlParams(), SqrlValue() (self).
   # SQRL Callers:
-  #   SqrlConfig(), SqrlDelegate(), SqrlSources().
+  #   SqrlConfig(), SqrlDelegate(), SqrlSources(), SqrlValue() (self).
   # User:
   #   Has no direct access, but is able to supply (only) parameter and set via
   #   SqrlDelegate() and/or SqrlConfig(). The former vets parameter while the
@@ -3626,7 +3689,29 @@ SqrlValue <- function(datasource = "",
   #   should be sourcing their values from this, and not from SqrlParam().
 
   # This is the text with which secret information (pwd) is replaced.
-  oblit <- "*****"
+  # Six asterisks have been chosen for consistency with RODBC.
+  oblit <- "******"
+
+  # A request for the (read-only) value of 'source' returns either the 'dsn'
+  # parameter, or the 'connection' parameter, whichever defines the source,
+  # with any placeholders substituted and any secrets obliterated.
+  if (base::identical(parameter, "source"))
+  {
+    connection <- base::as.character(SqrlValue(datasource, "connection"))
+    if (base::nchar(connection) > 0)
+    {
+      for (spar in SqrlParams("substitutable"))
+      {
+        connection <- base::gsub(base::paste0("<", spar, ">"),
+                                  SqrlValue(datasource, spar), connection)
+      }
+      base::names(connection) <- "connection"
+      base::return(connection)
+    }
+    dsn <- base::as.character(SqrlValue(datasource, "dsn"))
+    base::names(dsn) <- "dsn"
+    base::return(dsn)
+  }
 
   # Retrieve the parameter value, after setting it if so instructed.
   if (!base::missing(set))
