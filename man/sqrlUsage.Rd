@@ -61,6 +61,11 @@ chaos("emissions.sqrl", make = "VEB", model = "Trabant 601")
 If necessary, a connection channel will be opened beforehand.
 The connection will remain open afterwards.
 
+If a query should fail because of an unexpectedly lost connection, an attempt
+will be made to re-connect and re-submit.
+Unless credentials are required for authentication, this should go unnoticed by
+the user.
+
 When a query returns no data (as would \sQuote{use database}), the interface
 function returns invisibly.
 
@@ -98,8 +103,7 @@ chaos()$uid
 # List the values of all parameters.
 chaos("config")
 }
-Passwords are returned obliterated.
-The output format of \dQuote{source} is likely to change with the next release. 
+Passwords are returned obliterated. 
 }
 \section{Setting Parameters}{
 \preformatted{

@@ -45,19 +45,15 @@ sqrlSources()
 \dontrun{
 # Sample sqrlSources() output:
 
-   name interface open    uid                     driver
-1 chaos     chaos    N zarkov       PostgreSQL ANSI(x64)
-2 order      <NA>    N zarkov MySQL ODBC 5.3 ANSI Driver
+   name interface open                     driver
+1 chaos     chaos    N       PostgreSQL ANSI(x64)
+2 order      <NA>    N MySQL ODBC 5.3 ANSI Driver
 
 # Here, there are two data sources; 'order' and 'chaos'.
 # The interface to 'chaos' is a function of the same name.
 # No interface has yet been defined for 'order' (use of
 # that name is prevented due to its conflicting with the 
 # base:order function). Neither source (channel) is open.
-
-# Contents of the 'uid' column can be incorrect when the
-# UID is contained within a DSN. As such, this column is
-# likely to be absent in the next release.
 }
 
 # Remove all sources.

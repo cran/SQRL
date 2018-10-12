@@ -19,11 +19,19 @@
 
 #################################################################### HISTORY ###
 
-# 4 June 2018.
-# No longer supplies the default UID when connecting via DSN, as this overrides
-# any possible UID already contained within the DSN. SQL submissions to sources
-# now return invisibly when the result is not a data frame (such as that of 'use
-# database'). Added interface()$ispoen and interface()$source.
+# 12 October 2018.
+# No longer returns a UID column in tables of available sources, because this
+# can be inaccurate when a DSN contains a UID specification. In the same tables,
+# does not test open channels via ping, as this might present the user with a
+# series of authentication requests. Within strings, the script parser now
+# correctly distinguishes \" (quote literal) from \\" (slash-literal, followed
+# by end-of-string delimiter).
+
+# 4 June 2018. CRAN v0.4.0.
+# No longer supplies the default UID when connecting via DSN (as this overrides
+# any possible UID already contained within the DSN). Non-query SQL submissions
+# (such as 'use database', and which do not produce data frames) now return
+# invisibly. Added interface()$isopen and interface()$source.
 
 # 16 April 2018. CRAN v0.3.0.
 # Implemented run-time-generated help for interface functions. Activated source
@@ -205,7 +213,7 @@ SqrlCache <- function(datasource = "",
   }
 
   # If the delete flag was set, close any open connection to the source, delete
-  # its interface, delete its cache (this complete deregistration from SQRL),
+  # its interface, delete its cache (this completes deregistration from SQRL),
   # and return invisible NULL. The garbage collector ought to take care of any
   # parameters within the cache.
   if (delete)
@@ -714,9 +722,15 @@ SqrlDelegate <- function(datasource = "",
       base::return(SqrlConfig(datasource, other.words))
     }
 
-    # If the first word is 'help', or some multiple of '?'. then provide help.
-    if (("help" == first.word)
-        || base::grepl("^[?]+$", first.word))
+    # If the first word is 'help', or some multiple of '?', and the other words
+    # are 'text', 'html', or absent, then provide help. We test for those other
+    # words here, because (for example) 'help volatile table' is valid Teradata,
+    # and "help 'contents'" is valid MySQL. Neither allows just 'help' alone.
+    if ((("help" == first.word)
+          || base::grepl("^[?]+$", first.word))
+        && ((first.word == only.word)
+            || base::identical(base::tolower(other.words), "html")
+            || base::identical(base::tolower(other.words), "text")))
     {
       base::return(SqrlHelp(datasource, other.words))
     }
@@ -1031,7 +1045,7 @@ SqrlFile <- function(datasource = "",
   patterns$tag.r.end       <- "</r>"
   patterns$tag.do          <- "<do>"
   patterns$tag.stop        <- "<stop>"
-  patterns$tag.result      <- "<result\\s*->\\s*[[:graph:]]+>"
+  patterns$tag.result      <- "<result\\s*->\\s*[^[:space:]>]+>"
   patterns$comment.begin   <- "/\\*"
   patterns$comment.end     <- "\\*/"
   patterns$comment.line    <- "--"
@@ -1187,7 +1201,8 @@ SqrlFile <- function(datasource = "",
 
       # Scan through the subsequent script delimiters, until the string
       # concludes with either an end-of-file, or matching quote delimiter.
-      # We only test for \ escaped quotes here (once already in quote mode).
+      # We only test for \ escaped quotes here (once already in quote mode,
+      # which also guarantees i > 1).
       # Some SQLs use doubled quotes within quotes to represent quote literals.
       # Such abominations are supported by this parser, at least in all testing
       # thus far, since 'x''' is read (here) as two strings: 'x' and '', which
@@ -1196,7 +1211,10 @@ SqrlFile <- function(datasource = "",
       i <- i + 1
       while ((i <= num.delims)
               && ((pat[i] != closing.quote)
-                  || (base::substring(script, pos[i] - 1, pos[i] - 1) == "\\")))
+                  || ((base::attr(base::regexpr(
+                        base::paste0("\\\\*", patterns[[closing.quote]], "$"),
+                        base::substring(script, pos[i - 1], pos[i])),
+                        "match.length") %% 2) == 0)))
       {
         i <- i + 1
       }
@@ -1370,13 +1388,16 @@ SqrlFile <- function(datasource = "",
           # script delimiters until reaching the end of the quote (ignore all
           # other delimiters found in between). Appending to the R script will
           # only occur later (at a comment, or an end-of-R delimiter). We only
-          # test for \ escaped quotes here (once already within quote mode).
+          # test for \ escaped quotes here (once already within quote mode,
+          # which also guarantees that i > 1).
           closing.quote <- pat[i]
           i <- i + 1
           while ((i <= num.delims)
                   && ((pat[i] != closing.quote)
-                      || (base::substring(script, pos[i] - 1, pos[i] - 1)
-                          == "\\")))
+                      || ((base::attr(base::regexpr(
+                          base::paste0("\\\\*", patterns[[closing.quote]], "$"),
+                          base::substring(script, pos[i - 1], pos[i])),
+                          "match.length") %% 2) == 0)))
           {
             i <- i + 1
           }
@@ -2913,7 +2934,6 @@ SqrlParams <- function(group = "")
     "source-table"          = base::c("name",
                                       "interface",
                                       "open",
-                                      "uid",
                                       "driver"),
 
     # Keywords used for SQL script identification in SqrlDelegate().
@@ -3349,7 +3369,7 @@ SqrlSources <- function(import = "")
     {
       if (param == "open")
       {
-        value <- base::c("N", "Y")[SqrlIsOpen(datasource, besure = TRUE) + 1]
+        value <- base::c("N", "Y")[SqrlIsOpen(datasource, besure = FALSE) + 1]
       } else
       {
         value <- SqrlValue(datasource, param)
@@ -3705,11 +3725,21 @@ SqrlValue <- function(datasource = "",
         connection <- base::gsub(base::paste0("<", spar, ">"),
                                   SqrlValue(datasource, spar), connection)
       }
-      base::names(connection) <- "connection"
       base::return(connection)
     }
     dsn <- base::as.character(SqrlValue(datasource, "dsn"))
-    base::names(dsn) <- "dsn"
+    # The conditional pasting below is as per RODBC::odbcConnect().
+    dsn <- base::paste0("DSN=", dsn)
+    if (SqrlParam(datasource, "uid", isdefined = TRUE)
+        && (base::nchar(SqrlValue(datasource, "uid")) > 0))
+    {
+      dsn <- base::paste0(dsn, ";UID=", SqrlValue(datasource, "uid"))
+    }
+    if (SqrlParam(datasource, "pwd", isdefined = TRUE)
+        && (base::nchar(SqrlValue(datasource, "pwd")) > 0))
+    {
+      dsn <- base::paste0(dsn, ";PWD=", SqrlValue(datasource, "pwd"))
+    }
     base::return(dsn)
   }
 

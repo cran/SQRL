@@ -233,6 +233,7 @@ Specifies the user identity (\acronym{UID}, user name) to use on the data
 source.
 Locked while the connection is open.
 Defaults to the local name of the \R user (\code{Sys.info()["user"]}).
+May be inaccurate when the \acronym{UID} is specified within a \acronym{DSN}.
 }
 \item{\var{verbose}:}{
 A logical singleton.
