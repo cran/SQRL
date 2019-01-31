@@ -24,6 +24,18 @@ That being the case, it is usually defined as a logical singleton (either
 \code{TRUE} or \code{FALSE}).
 Default value is \code{FALSE} (convert all character columns).
 }
+\item{\var{autoclose}:}{
+A logical singleton.
+Tells \pkg{SQRL} whether or not to automatically close the data source
+connection after each query (in general, a sequence of multiple statements).
+The default value is \code{FALSE}, which leaves the connection open.
+When set to \code{TRUE}, connections will normally only open for the duration of
+each query, but may sometimes remain open if a mid-query exception is thrown.
+Setting \code{TRUE} has no immediate effect upon a connection that is already
+open.
+When user input is required for authentication each time a new connection is
+opened, the default setting will be more convenient.
+}
 \item{\var{believeNRows}:}{
 A logical singleton.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
@@ -40,7 +52,7 @@ Default value is 1000.
 }
 \item{\var{case}:}{
 A character string, specifically one of \dQuote{nochange}, \dQuote{toupper},
-dQuote{tolower}, \dQuote{mysql}, \dQuote{postgresql}, or \dQuote{msaccess}.
+\dQuote{tolower}, \dQuote{mysql}, \dQuote{postgresql}, or \dQuote{msaccess}.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
 Specifies case-changing behaviour for table and column names.
 Locked while the connection is open.
@@ -73,7 +85,8 @@ dependent.
 Overrides \var{dsn}, should both be defined.
 Locked while the connection is open.
 Defaults to the empty string (connect via \acronym{DSN} instead).
-Setting \var{connection} resets \var{dsn}, unless \var{connection} contains the 
+Will accept \code{NULL} as an alias for the empty string.
+Setting \var{connection} resets \var{dsn}, unless \var{connection} contains the
 \dQuote{<dsn>} placeholder.
 }
 \item{\var{DBMSencoding}:}{
@@ -82,6 +95,7 @@ Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
 Names the encoding returned by the \acronym{DBMS}.
 Locked while the connection is open.
 Default value is the empty string (use encoding of the \R locale).
+Will accept \code{NULL} as an alias for the empty string.
 }
 \item{\var{dec}:}{
 A character string (typically a single character).
@@ -98,6 +112,7 @@ currently in use, or to be used when a channel is opened).
 This determines the requisite dialect of \acronym{SQL}.
 Locked while the connection channel is open.
 Defaults to the empty string.
+Will accept \code{NULL} as an alias for the empty string.
 }
 
 \item{\var{dsn}:}{
@@ -106,9 +121,13 @@ Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
 Specifies the data source name (\acronym{DSN}) to connect to.
 Can be a file path.
 Overridden by \var{connection}, when that parameter is defined.
-Locked while the connection is open.
-Setting \var{dsn} resets \var{connection}, unless \var{connection} contains the 
+Setting \var{dsn} resets \var{connection}, unless \var{connection} contains the
 \dQuote{<dsn>} placeholder.
+Setting \var{dsn} also sets \var{driver}, if the \acronym{DSN} exists and the
+associated driver can be identified.
+Locked while the connection is open.
+Defaults to the empty string.
+Will accept \code{NULL} as an alias for the empty string.
 }
 \item{\var{errors}:}{
 A logical singleton.
@@ -118,9 +137,10 @@ Controls whether or not to throw \R errors in response to
 Default value is \code{TRUE} (this differs from the \pkg{RODBC} default).
 }
 \item{\var{interface}:}{
-A character string.
+A character string, or \code{NULL}.
 The name of the \pkg{SQRL} interface function for this data source (see
 \code{\link{sqrlInterface}}).
+Setting \code{NULL} or \dQuote{remove} removes the interface.
 Default value is \code{NULL} (undefined).
 }
 \item{\var{interpretDot}:}{
@@ -166,8 +186,8 @@ A character string.
 Defines a simple \acronym{SQL} statement used by \pkg{SQRL} to verify source
 connections.
 This enables \pkg{SQRL} to make one automatic reconnection attempt after a
-network outage or other unexpected channel closure (the process is silent when
-\pkg{SQRL} also knows the value of \var{pwd}).
+network outage or other unexpected channel closure (this process is silent
+unless user-input is required for authentication).
 The default value is \acronym{DBMS}-dependent.
 Manual definition may be necessary in the event that \pkg{SQRL} fails to
 identify an appropriate statement for the particular \acronym{DBMS} of the
@@ -182,13 +202,16 @@ Single-letter indicators are recommended since, if two sources are open and one
 indicator is a substring of the other, then \pkg{SQRL} may fail to correctly
 update the prompt when one source is closed.
 Can be set to an empty string, in which case nothing is applied to the prompt.
+Will accept \code{NULL} as an alias for the empty string.
 }
 \item{\var{pwd}:}{
 A character string.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
 Specifies the password for authentication.
 Locked while the connection is open.
-Defaults to the empty string.
+Defaults to the empty string (interpreted as do not supply a password to the 
+\acronym{ODBC} driver).
+Will accept \code{NULL} as an alias for the empty string.
 Write-only.
 }
 \item{\var{readOnlyOptimize}:}{
@@ -223,8 +246,7 @@ quote character at both ends of a name, and of length two means apply the first
 specified character to the start of the name and the second specified character
 to the end of the name.
 Locked while the connection is open.
-The default value is a backtick for MySQL, and a double-quote for everything
-else.
+Defaults to the value of \var{colQuote}.
 }
 \item{\var{uid}:}{
 A character string.
@@ -233,13 +255,18 @@ Specifies the user identity (\acronym{UID}, user name) to use on the data
 source.
 Locked while the connection is open.
 Defaults to the local name of the \R user (\code{Sys.info()["user"]}).
+Will accept \code{NULL} as an alias for the empty string (which is interpreted
+as do not pass a \acronym{UID} to the \acronym{ODBC} driver).
 May be inaccurate when the \acronym{UID} is specified within a \acronym{DSN}.
 }
 \item{\var{verbose}:}{
 A logical singleton.
 Controls whether or not to display verbose output while processing \acronym{SQL}
-files.
+or \acronym{SQRL} files.
 The default is \code{FALSE} (verbose output disabled).
+When \code{TRUE}, usually only the \code{\link[utils:head]{head}} of each 
+intermediate object is displayed.
+Sufficiently exotic objects may fail to print.
 }
 \item{\var{visible}:}{
 A logical singleton.
@@ -251,6 +278,7 @@ global option (see \code{\link[base:options]{base:options}}).
 }
 \item{\var{wintitle}:}{
 A character string, possibly empty.
+Will accept \code{NULL} as an alias for the empty string.
 Defines an indicator that, unless empty, is displayed on the \R window title bar
 while a connection channel is open to the source, and provided \var{visible} is
 \code{TRUE}.
@@ -261,7 +289,8 @@ If two sources are open and one indicator is a substring of the other, then
 \pkg{SQRL} may fail to correctly update the title when one source is closed.
 Only works with \file{R.exe}, \file{Rterm.exe} and \file{Rgui.exe}, and then
 only while running on a \dQuote{Windows} operating system.
-Does not work with \dQuote{RStudio}.
+Works with both \acronym{MDI} and \acronym{SDI} modes, but does not work with
+\dQuote{RStudio}.
 }
 }
 }
@@ -272,8 +301,7 @@ does not affect the value for any other source.
 Use \code{\link[SQRL:sqrlAll]{sqrlAll()}} to make blanket changes.
 }
 \seealso{
-\code{\link{sqrlConfig}},
 \code{\link{sqrlUsage}},
-\code{\link[RODBC:RODBC-package]{RODBC}}
+\pkg{\link[RODBC:RODBC-package]{RODBC}}
 }
 \keyword{misc}

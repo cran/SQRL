@@ -26,7 +26,6 @@ The command can be a \acronym{SQL} query.
 }
 \seealso{
 \code{\link{sqrlOff}},
-\code{\link{sqrlParams}},
 \code{\link{sqrlUsage}}
 }
 \examples{

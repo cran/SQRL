@@ -35,8 +35,7 @@ They can be manually added via \code{\link{sqrlSource}}.
 }
 \seealso{
 \code{\link{sqrlInterface}},
-\code{\link{sqrlSource}},
-\code{\link[RODBC:odbcDataSources]{RODBC:odbcDataSources}}
+\code{\link{sqrlSource}}
 }
 \examples{
 # Review defined sources.

@@ -3,36 +3,52 @@
 \alias{SQRL}
 \docType{package}
 \title{
-\packageTitle{SQRL}
+Database Query Interfaces
 }
 \description{
-Facilitates exploratory work and rapid prototyping with Open Database Connectivity (\acronym{ODBC}) data sources.
+Facilitates exploratory work and rapid prototyping with Open Database
+Connectivity (\acronym{ODBC}) data sources.
 }
 \details{
+Automatically creates like-named interface functions to \acronym{ODBC} data
+source names (\acronym{DSN}s).
+These functions support multi-statement \acronym{SQL} scripts, with or without
+arguments, embedded \R expressions, or flow-control structures.
+
+Additional interfaces can be defined at any time.
+Set-and-forget communication parameters are managed behind the scenes.
 The package is a wrapper about \pkg{RODBC}.
-On load, it looks for data source names (\acronym{DSN}s) and attempts to
-create a like-named interface function for each.
-Additional data-source interfaces can be defined at any time.
-These functions support multi-statement \acronym{SQL} scripts, with or without 
-parameters or embedded \R expressions, and dispense with the need to provide
-explicit communication details with every query.
 }
 \section{Version}{
-0.5.0
+0.6.0
+}
+\section{Changes}{
+\itemize{
+\item Scripts support conditionals, loops and returns.
+\item Option for closing connections between queries.
+}
 }
 \author{
-\packageAuthor{SQRL}
+Mike Lee
 }
 \seealso{
-\code{\link{sqrlInterface}},
-\code{\link{sqrlUsage}},
-\code{\link[RODBC:RODBC-package]{RODBC}}
+\code{\link{sqrlSources}},
+\code{\link{sqrlUsage}}
 }
 \examples{
 require(SQRL)
 
-# Show (pre)defined data sources.
+# Show (automatic) data sources.
 sqrlSources()
+
+\dontrun{
+# If ratatoskr were one of those sources
+# (i.e., if a DSN of that name was found),
+# then a query could be submitted like so:
+ratatoskr("select messages from vedfolnir ",
+          "where addressee = 'nidhogg' ",
+          "limit ", 5)
+}
 
 # Define a new data source.
 sqrlSource("mysource",
@@ -41,22 +57,15 @@ sqrlSource("mysource",
             user = "<uid>",
             password = "<pwd>")
 
-# Obtain help on usage (in text format).
-mysource("help", "text")
-
 \dontrun{
+# Obtain help on usage.
+mysource("help")
+
 # Submit a query to the new source.
-mysource("select 1")
+mysource("select * from database.table")
 
 # Submit a parameterised query from file.
 mysource("transactions.sqrl", customerid = 111111)
-
-# Define a source from file.
-sqrlSource("ratatoskr", "~/yggdrasil")
-
-# Submit a query to that source.
-ratatoskr("select messages from vedfolnir ",
-          "where addressee = 'nidhogg'")
 }
 }
 \keyword{database}

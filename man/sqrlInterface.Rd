@@ -28,8 +28,8 @@ An error will be thrown if a potential conflict is detected.
 Conversely, a successful call of this function guarantees both the existence of
 the new interface, and the uniqueness of its name.
 
-If the interface name is specified as \dQuote{remove}, then any existing
-interface is deleted (and no new interface is created).
+If the interface name is specified as either \code{NULL} or \dQuote{remove},
+then any existing interface is deleted (and no new interface is created).
 
 If only a single string is supplied, the name of that source's interface
 function is returned.
@@ -43,9 +43,7 @@ Interfaces are stored in a publicly accessible environment, \code{SQRL:Face}.
 This is attached to the \R search path when the package is loaded.
 }
 \seealso{
-\code{\link[SQRL:SQRL-package]{SQRL}},
-\code{\link{sqrlSources}},
-\code{\link{sqrlUsage}}
+\code{\link{sqrlSource}}
 }
 \examples{
 # Define a new data source, named 'entropy'.

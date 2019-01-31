@@ -38,6 +38,7 @@ dec                 = .
 stringsAsFactors    = FALSE
 
 # Parameters for SQRL.
+autoclose           = TRUE
 driver              = "{IBM DB2 ODBC DRIVER}"
 interface           = "Q"
 ping                = "select 1 from dual"
@@ -67,9 +68,7 @@ parameter on the left hand side is not assigned to).
 }
 \seealso{
 \code{\link{sqrlParams}},
-\code{\link{sqrlSource}},
-\code{\link{sqrlUsage}},
-\pkg{\link[RODBC:RODBC-package]{RODBC}}
+\code{\link{sqrlSource}}
 }
 \examples{
 # Define a new source (not from file).
@@ -87,7 +86,7 @@ Orac("config", "my/config/file")
 Orac(connection = "my/other/file")
 
 # Define and configure a new source from file.
-sqrlSource("Zen", "my/other/" "file")
+sqrlSource("Zen", "my/other/", "file")
 }
 }
 \keyword{file}

@@ -20,9 +20,7 @@ Calls to \code{\link[RODBC:odbcClose]{RODBC:odbcCloseAll}} will close any
 connection channels open in \pkg{SQRL}.
 }
 \seealso{
-\code{\link[SQRL:SQRL-package]{SQRL}},
-\code{\link{sqrlInterface}},
-\pkg{\link[RODBC:RODBC-package]{RODBC}}
+\pkg{\link[SQRL:SQRL-package]{SQRL}}
 }
 \examples{
 \dontrun{

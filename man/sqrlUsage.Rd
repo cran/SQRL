@@ -16,26 +16,32 @@ Once you have a named interface, created either automatically (on loading of the
 the associated data source.
 Connection handles and communication parameters are managed under the hood.
 
-Subsequent sections provide usage examples for an interface called \code{chaos}.
+Subsequent sections provide usage examples for an interface called \code{thoth}.
 The names of your own interface functions can be discovered by calling
 \code{\link[SQRL:sqrlSources]{sqrlSources()}}.
 }
 \section{Opening and Closing}{
 \preformatted{
 # Open a connection to the data source.
-chaos()
+thoth()
 
 # Alternative method (explicit form).
-chaos("open")
+thoth("open")
 
 # Doing this is fine (the channel survives).
 rm(list = ls(all.names = TRUE))
 
 # Check if the connection is open.
-chaos("isopen")
+thoth("isopen")
+
+# Open a connection and confirm status.
+thoth()$isopen
 
 # Close the connection.
-chaos("close")
+thoth("close")
+
+# Close the connection when not in use.
+thoth(autoclose = TRUE)
 }
 Opening connections in the above way isn't usually necessary, since this occurs
 automatically as required.
@@ -43,20 +49,32 @@ automatically as required.
 The \command{isopen} command \dQuote{pings} the data source, to reliably
 establish whether or not the connection really is open (including after a
 network outage or remote closure).
+
+With \code{autoclose = TRUE}, \command{isopen} will normally return
+\code{FALSE}, since the connection is closed after every data source command
+sequence (including the \command{open} command).
 }
 \section{Submitting Queries}{
 \preformatted{
 # Submit a query.
-chaos("select 1")
+thoth("select 1")
 
 # Submit another query.
-chaos("select ", sample(6, 1), " from dual")
+thoth("select ", sample(6, 1), " from dual")
 
 # Submit a query from file.
-chaos("my/", "file.sql")
+thoth("my/", "file.sql")
 
 # Submit a parameterised query from file.
-chaos("emissions.sqrl", make = "VEB", model = "Trabant 601")
+thoth("emissions.sqrl", make = "VEB", model = "Trabant 601")
+
+# Submit a multi-statement query.
+thoth(query = "use necronomicon; select top
+               <R> N </R> shoggoths from pit",
+      N = 5)
+
+# Ensure input is treated only as a file name.
+thoth(file = "create table")
 }
 If necessary, a connection channel will be opened beforehand.
 The connection will remain open afterwards.
@@ -70,71 +88,83 @@ When a query returns no data (as would \sQuote{use database}), the interface
 function returns invisibly.
 
 If a file called (say) \file{use database} should exist, then
-\code{chaos("use database")} submits the content of that file (rather than the
+\code{thoth("use database")} submits the content of that file (rather than the
 apparent command).
+This renders use of the \var{file} argument mostly unnecessary.
+
+Use of either the \var{query} or \var{file} argument forces interpretation of
+the corresponding value as a query or file path (from which to read a query),
+respectively.
+The \var{query} argument uses the \var{verbose} option and allows multiple
+statements and embedded \R (as with \code{\link{sqrlScript}} files), whereas
+unnamed queries do not (instead, they allow and concatenate multiple strings).
 }
 \section{Querying Metadata}{
 \preformatted{
 # Get information on source data types.
-chaos("typeinfo")
+thoth("typeinfo")
 
-# Get a list of source tables.
-chaos("tables")
+# List all tables.
+thoth("tables")
+
+# List all tables within a database (schema).
+thoth("tables", "mydatabase")
 
 # Get information on the columns of a particular table.
-chaos("columns", "my.table")
+thoth("columns", "my.table")
 }
 The \command{typeinfo}, \command{tables}, and \command{columns} commands are
-simple wrappers to \code{\link[RODBC:sqlTypeInfo]{RODBC:sqlTypeInfo}},
+simple (reduced functionality) wrappers about
+\code{\link[RODBC:sqlTypeInfo]{RODBC:sqlTypeInfo}},
 \code{\link[RODBC:sqlTables]{RODBC:sqlTables}}, and
 \code{\link[RODBC:sqlColumns]{RODBC:sqlColumns}} (respectively).
 }
 \section{Reviewing Settings}{
 \preformatted{
 # Get the associated source definition.
-chaos("source")
+thoth("source")
 
 # Get the value of one named parameter.
-chaos("uid")
+thoth("uid")
 
 # Alternative method (pings the source).
-chaos()$uid
+thoth()$uid
 
 # List the values of all parameters.
-chaos("config")
+thoth("config")
 }
-Passwords are returned obliterated. 
+Passwords are returned obliterated.
 }
 \section{Setting Parameters}{
 \preformatted{
 # Enable visible indication of open connections.
-chaos("visible", TRUE)
+thoth("visible", TRUE)
 
 # Define the ping statement for the data source.
-chaos("ping", "use database")
+thoth("ping", "use database")
 
 # Do not convert strings to factors.
-chaos("stringsAsFactors FALSE")
+thoth("stringsAsFactors FALSE")
 
 # Set (opening and closing) table-name quotes.
-chaos(tabQuote = c("`", "'"))
+thoth(tabQuote = c("`", "'"))
 
 # Setting multiple parameters at once.
-chaos(as.is = TRUE, na.strings = c("NA", "-", ""))
+thoth(as.is = TRUE, na.strings = c("NA", "-", ""))
 
 # Set one (named) parameter from a file.
-chaos("ping" = "path/to/file")
+thoth("ping" = "path/to/file")
 
 # Import an entire configuration file.
-chaos("config", "path/", "to/", "file")
+thoth("config", "path/", "to/", "file")
 
 # Reset parameters to their default values.
-chaos("reset", c("as.is", "na.strings"))
+thoth("reset", c("as.is", "na.strings"))
 }
-Calls of the form \code{chaos("name value")},
-\code{chaos("name", "value")}, \code{chaos("name", value)},
-\code{chaos(name = value)}, \code{chaos("name" = value)},
-\code{chaos(name = "value")} and \code{chaos("name" = "value")}
+Calls of the form \code{thoth("name value")},
+\code{thoth("name", "value")}, \code{thoth("name", value)},
+\code{thoth(name = value)}, \code{thoth("name" = value)},
+\code{thoth(name = "value")} and \code{thoth("name" = "value")}
 are largely interchangeable.
 
 The \var{driver} and \var{dsn} parameters accept file paths as their values.
@@ -149,10 +179,10 @@ When running \file{R.exe}, \file{Rterm.exe} or \file{Rgui.exe} on a
 \section{Changing the Interface}{
 \preformatted{
 # Change the interface.
-chaos("interface", "K")
+thoth("interface", "H")
 
 # Change it back.
-K(interface = "chaos")
+H(interface = "thoth")
 }
 If the proposed new interface name already belongs to some other object within
 the \R search path, then the change request will be denied (unless that name is
@@ -163,38 +193,38 @@ A successful change deletes the previous interface.
 \section{Listing Data Sources}{
 \preformatted{
 # See the data sources and their interfaces.
-chaos("sources")
+thoth("sources")
 }
 This is equivalent to calling \code{\link[SQRL:sqrlSources]{sqrlSources()}}.
 }
 \section{Getting Help}{
 \preformatted{
-# Get help on 'chaos'.
-chaos("help")
+# Get help on 'thoth'.
+thoth("help")
 
 # Alternative form.
-chaos("?")
+thoth("?")
 }
 The above calls will attempt to provide help tailored for the specific
 interface, and will fall back to these notes (\code{help(sqrlUsage)} or
 \code{?sqrlUsage}) should that fail.
+
+Either of the commands \command{text} or \command{html} may be appended to
+\command{help} if a specific output format is required.
 }
 \section{Removing the Source}{
 \preformatted{
 # Deregister the associated source.
-chaos("remove")
+thoth("remove")
 }
 This closes any open connection to the data source, deletes the
-(\code{chaos}) interface function, and deregisters the source from \pkg{SQRL}.
+(\code{thoth}) interface function, and deregisters the source from \pkg{SQRL}.
 }
 \seealso{
 \code{\link{sqrlAll}},
 \code{\link{sqrlConfig}},
-\code{\link{sqrlInterface}},
 \code{\link{sqrlParams}},
-\code{\link{sqrlScript}},
-\code{\link{sqrlSource}},
-\code{\link{sqrlSources}}
+\code{\link{sqrlScript}}
 }
 \keyword{database}
 \keyword{interface}
