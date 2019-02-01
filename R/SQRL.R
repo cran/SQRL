@@ -21,6 +21,9 @@
 
 #################################################################### HISTORY ###
 
+# 1 February 2019. CRAN 0.6.1. Now requires R-3.3+ (for .traceback()) Removed an
+# R-3.5 dependency, isFALSE(), that had also crept into the previous version.
+
 # 31 January 2019. CRAN 0.6.0. Parser supports conditionals, loops and returns.
 # Semicolons can be used in place of <do> tags. Added the autoclose parameter.
 
@@ -1858,8 +1861,9 @@ SqrlFile <- function(datasource = "",
               }
 
               # We require expressions to evaluate to Boolean singletons.
-              if (!base::isTRUE(cond.current)
-                  && !base::isFALSE(cond.current))
+              if (!base::is.logical(cond.current)
+                  || (base::length(cond.current) != 1L)
+                  || base::is.na(cond.current))
               {
                 if (SqrlParam(datasource, "autoclose"))
                 {

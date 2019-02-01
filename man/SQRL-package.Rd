@@ -20,12 +20,13 @@ Set-and-forget communication parameters are managed behind the scenes.
 The package is a wrapper about \pkg{RODBC}.
 }
 \section{Version}{
-0.6.0
+0.6.1
 }
 \section{Changes}{
 \itemize{
 \item Scripts support conditionals, loops and returns.
 \item Option for closing connections between queries.
+\item Requires R-3.3, or newer.
 }
 }
 \author{
