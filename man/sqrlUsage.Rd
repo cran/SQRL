@@ -70,14 +70,19 @@ thoth("emissions.sqrl", make = "VEB", model = "Trabant 601")
 
 # Submit a multi-statement query.
 thoth(query = "use necronomicon; select top
-               <R> N </R> shoggoths from pit",
-      N = 5)
+               <R> N </R> shoggoths from pit", N = 5)
 
 # Ensure input is treated only as a file name.
 thoth(file = "create table")
 }
 If necessary, a connection channel will be opened beforehand.
-The connection will remain open afterwards.
+The connection will remain open afterwards, unless \var{autoclose} is
+\code{TRUE}.
+
+To be clear, the phrase \sQuote{parameterised query} is not meant in the sense
+of prepared or parameterised statements (as per package \pkg{RODBCext}).
+Here, parameter substitution occurs inside \R, with the resulting string being
+passed to the \acronym{ODBC} driver as an ordinary query.
 
 If a query should fail because of an unexpectedly lost connection, an attempt
 will be made to re-connect and re-submit.

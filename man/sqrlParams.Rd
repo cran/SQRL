@@ -38,7 +38,7 @@ opened, the default setting will be more convenient.
 }
 \item{\var{believeNRows}:}{
 A logical singleton.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Tells \pkg{RODBC} whether or not to trust the nominal number of rows returned by
 the \acronym{ODBC} connection.
 Locked while the connection is open.
@@ -53,20 +53,20 @@ Default value is 1000.
 \item{\var{case}:}{
 A character string, specifically one of \dQuote{nochange}, \dQuote{toupper},
 \dQuote{tolower}, \dQuote{mysql}, \dQuote{postgresql}, or \dQuote{msaccess}.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Specifies case-changing behaviour for table and column names.
 Locked while the connection is open.
 Default value is \dQuote{nochange}.
 }
 \item{\var{channel}:}{
 An \pkg{RODBC} connection handle.
-Returned by \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Returned by \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Argument to \code{\link[RODBC:sqlQuery]{RODBC:sqlQuery}}.
 This parameter is read-only.
 }
 \item{\var{colQuote}:}{
 A character vector of length 0, 1, or 2, or \code{NULL}.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Specifies the quote character(s) for column names.
 A vector of length zero means no quotes, of length one means apply the specified
 quote character at both ends of a name, and of length two means apply the first
@@ -91,7 +91,7 @@ Setting \var{connection} resets \var{dsn}, unless \var{connection} contains the
 }
 \item{\var{DBMSencoding}:}{
 A character string.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Names the encoding returned by the \acronym{DBMS}.
 Locked while the connection is open.
 Default value is the empty string (use encoding of the \R locale).
@@ -145,7 +145,7 @@ Default value is \code{NULL} (undefined).
 }
 \item{\var{interpretDot}:}{
 A logical singleton.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Locked while the connection is open.
 Controls whether or not to interpret table names of the form \dQuote{aaa.bbb} as
 table \dQuote{bbb} in schema/database \dQuote{aaa}.
@@ -209,14 +209,14 @@ A character string.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
 Specifies the password for authentication.
 Locked while the connection is open.
-Defaults to the empty string (interpreted as do not supply a password to the 
+Defaults to the empty string (interpreted as do not supply a password to the
 \acronym{ODBC} driver).
 Will accept \code{NULL} as an alias for the empty string.
 Write-only.
 }
 \item{\var{readOnlyOptimize}:}{
 A logical singleton.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Specifies whether or not to optimise the \acronym{ODBC} connection for read-only
 access.
 Locked while the connection is open.
@@ -224,7 +224,7 @@ Default value is \code{FALSE}.
 }
 \item{\var{rows_at_time}:}{
 A positive integer, between 1 and 1024.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Specifies the number of rows to fetch at a time when retrieving query results.
 Locked while the connection is open.
 The default value is 100.
@@ -239,7 +239,7 @@ Defaults to \code{default.stringsAsFactors()}.
 }
 \item{\var{tabQuote}:}{
 A character vector of length 0, 1, or 2, or \code{NULL}.
-Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcConnect}}.
+Argument to \code{\link[RODBC:odbcConnect]{RODBC:odbcDriverConnect}}.
 Specifies the quote character(s) for table names.
 A vector of length zero means no quotes, of length one means apply the specified
 quote character at both ends of a name, and of length two means apply the first
@@ -264,7 +264,7 @@ A logical singleton.
 Controls whether or not to display verbose output while processing \acronym{SQL}
 or \acronym{SQRL} files.
 The default is \code{FALSE} (verbose output disabled).
-When \code{TRUE}, usually only the \code{\link[utils:head]{head}} of each 
+When \code{TRUE}, usually only the \code{\link[utils:head]{head}} of each
 intermediate object is displayed.
 Sufficiently exotic objects may fail to print.
 }

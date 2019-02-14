@@ -7,7 +7,7 @@ Configuration Files
 This material does not describe a function, but (rather) the file format used to
 configure \pkg{SQRL} interfaces and \pkg{RODBC} communications.
 
-Configuration files can be used to define new data sources, set blanket 
+Configuration files can be used to define new data sources, set blanket
 parameter values for existing sources, or set individually named parameter
 values.
 }

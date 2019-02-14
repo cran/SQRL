@@ -21,38 +21,11 @@
 
 #################################################################### HISTORY ###
 
-# 1 February 2019. CRAN 0.6.1. Now requires R-3.3+ (for .traceback()) Removed an
-# R-3.5 dependency, isFALSE(), that had also crept into the previous version.
-
-# 31 January 2019. CRAN 0.6.0. Parser supports conditionals, loops and returns.
-# Semicolons can be used in place of <do> tags. Added the autoclose parameter.
-
-# 12 October 2014. CRAN 0.5.0. Various small improvements to the script parser,
-# interface argument checkers, and the sqrlSources() summary function.
-
-# 4 June 2018. CRAN 0.4.0. Enabled interface()$isopen and interface()$source.
-# Invisible return of the trivial results of non-query SQL submissions.
-
-# 16 April 2018. CRAN 0.3.0. Run-time generated help. Source deregistration.
-# Parameter resetting. Interface()$parameter. SQRL-script <R> ... <do> blocks.
-
-# 10 March 2018. CRAN 0.2.1. The driver parameter can be defined as a file path
-# (as may be appropriate on GNU/Linux systems).
-
-# 8 March 2018. CRAN 0.2.0. Support for kwargs and explicitly parameterised SQRL
-# scripts. Complete documentation overhaul.
-
-# 8 January 2018. CRAN 0.1.1. Removed calls of sqrlOff() from help-file examples
-# for compliance with the upcoming R-3.5.
-
-# 12 November 2017. CRAN 0.1.0. Completely rewritten for R 3.2+. No longer
-# domain or DBMS specific.
-
-# 15 April 2014. Packaged but not published. Support for SQL scripts (multiple
-# statements, embedded R). Remains domain and DBMS specific.
-
-# 7 January 2014. Unpackaged prototype script. R-2. Domain and DBMS specific.
-# No support for SQL-scripts. Channels protected from rm(). Openness indicators.
+# 2019-01. 0.6.0. Script conditionals, loops, and returns. R-3.3.
+# 2018-03. 0.2.0. Kwargs. Explicit script parameter passing.
+# 2017-11. 0.1.0. Published. R-3.2.
+# 2014-04. Unpublished package. Script support.
+# 2014-01. Unpackaged prototype script. R-2.
 
 
 
@@ -1551,7 +1524,8 @@ SqrlFile <- function(datasource = "",
       }
 
       # Throw an exception if we've met an else but not a previous if.
-      if (base::length(else.stack) < 1L)
+      if ((pat.type == "tag.else")
+          && (base::length(else.stack) < 1L))
       {
         if (SqrlParam(datasource, "autoclose"))
         {
@@ -1649,6 +1623,17 @@ SqrlFile <- function(datasource = "",
       # Remember which type of tag we've encountered, and where we found it.
       tag.type <- pat[i]
       tag.pos <- i
+
+      # Abort on else-if without prior if (avoids an uncontrolled error later).
+      if ((tag.type == "tag.elseif")
+          && (base::length(else.stack) < 1L))
+      {
+        if (SqrlParam(datasource, "autoclose"))
+        {
+          SqrlClose(datasource)
+        }
+        base::stop("Else-if without if.")
+      }
 
       # Append any preceding fragment to the statement, unless within the block
       # of an untrue conditional expression.
