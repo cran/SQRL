@@ -188,6 +188,7 @@ connections.
 This enables \pkg{SQRL} to make one automatic reconnection attempt after a
 network outage or other unexpected channel closure (this process is silent
 unless user-input is required for authentication).
+Temporary tables will not survive lost connections.
 The default value is \acronym{DBMS}-dependent.
 Manual definition may be necessary in the event that \pkg{SQRL} fails to
 identify an appropriate statement for the particular \acronym{DBMS} of the

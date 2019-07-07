@@ -68,12 +68,21 @@ thoth("my/", "file.sql")
 # Submit a parameterised query from file.
 thoth("emissions.sqrl", make = "VEB", model = "Trabant 601")
 
-# Submit a multi-statement query.
+# The same, with parameter values supplied in a list.
+thoth(file = "emissions.sqrl",
+      args = list(make = "VEB", model = "Trabant 601"))
+
+# Query from file, with an implicit parameter-value list.
+thoth("path/", "to/", "file",
+      list(type = "prime", series = "Zenith"))
+
+# Submit a multi-statement query (without a file).
 thoth(query = "use necronomicon; select top
                <R> N </R> shoggoths from pit", N = 5)
 
-# Ensure input is treated only as a file name.
-thoth(file = "create table")
+# Parameter values in a list (transparent example).
+thoth(query = "select <R> x * y </R>",
+      args = list(x = 2, y = 3))
 }
 If necessary, a connection channel will be opened beforehand.
 The connection will remain open afterwards, unless \var{autoclose} is
@@ -84,18 +93,28 @@ of prepared or parameterised statements (as per package \pkg{RODBCext}).
 Here, parameter substitution occurs inside \R, with the resulting string being
 passed to the \acronym{ODBC} driver as an ordinary query.
 
+When submitting such a parameterised query from file, parameter values may be
+specified as individually named arguments and/or as lists of (multiple) named
+arguments.
+To be precise, if an argument is named \var{args}, and its value is a non-empty
+list, and every member of that list has a syntactically valid name, then each of
+those named members is individually applied to the query (rather than applying
+the entire \var{args} list as a single object).
+
+As in the implicit parameter-value list example (above), when none of the
+arguments to the interface function are named, and the last argument looks like
+an \var{args} list, and the remaining arguments constiture the path to a file,
+then they will all be interpreted as such.
+
 If a query should fail because of an unexpectedly lost connection, an attempt
 will be made to re-connect and re-submit.
 Unless credentials are required for authentication, this should go unnoticed by
 the user.
+However, if any temporary tables were in existence before the connection was
+lost then they will have been dropped, and that may be quite noticeable.
 
 When a query returns no data (as would \sQuote{use database}), the interface
 function returns invisibly.
-
-If a file called (say) \file{use database} should exist, then
-\code{thoth("use database")} submits the content of that file (rather than the
-apparent command).
-This renders use of the \var{file} argument mostly unnecessary.
 
 Use of either the \var{query} or \var{file} argument forces interpretation of
 the corresponding value as a query or file path (from which to read a query),
@@ -103,6 +122,11 @@ respectively.
 The \var{query} argument uses the \var{verbose} option and allows multiple
 statements and embedded \R (as with \code{\link{sqrlScript}} files), whereas
 unnamed queries do not (instead, they allow and concatenate multiple strings).
+
+If a file called (say) \file{use database} should exist, then
+\code{thoth("use database")} submits the content of that file (rather than the
+apparent command).
+This renders explicit use of the \var{file} argument name mostly unnecessary.
 }
 \section{Querying Metadata}{
 \preformatted{
@@ -180,6 +204,8 @@ Assigning \var{visible} \code{TRUE} authorises modification of the global
 When running \file{R.exe}, \file{Rterm.exe} or \file{Rgui.exe} on a
 \dQuote{Windows} operating system, this also authorises modification of the
 \R window title.
+
+Calling \dQuote{reset} on its own, as in \code{thoth("reset")}, does nothing.
 }
 \section{Changing the Interface}{
 \preformatted{

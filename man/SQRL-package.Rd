@@ -18,9 +18,7 @@ arguments, embedded \R expressions, or flow-control structures.
 Additional interfaces can be defined at any time.
 Set-and-forget communication parameters are managed behind the scenes.
 The package is a wrapper about \pkg{RODBC}.
-}
-\section{Version}{
-0.6.2
+This is version 0.6.3.
 }
 \author{
 Mike Lee

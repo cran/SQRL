@@ -21,11 +21,11 @@
 
 #################################################################### HISTORY ###
 
-# 2019-01. 0.6.0. Script conditionals, loops, and returns. R-3.3.
-# 2018-03. 0.2.0. Kwargs. Explicit script parameter passing.
+# 2019-01. 0.6.0. Flow-control in scripts. R-3.3.
+# 2018-03. 0.2.0. Kwargs. Explicit script arguments.
 # 2017-11. 0.1.0. Published. R-3.2.
 # 2014-04. Unpublished package. Script support.
-# 2014-01. Unpackaged prototype script. R-2.
+# 2014-01. Unpackaged prototype. R-2.
 
 
 
@@ -294,11 +294,8 @@ SqrlConfig <- function(datasource = "",
   # including RODBC handles.
   if (base::nchar(confile) < 1L)
   {
-    params <- SqrlParams("all")
-    secret <- SqrlParams("secret")
-    semisecret <- SqrlParams("semi-secret")
     config <- base::list()
-    for (param in params)
+    for (param in SqrlParams("all"))
     {
       # Retrieve parameter values, excepting those held secret (passwords).
       value <- SqrlValue(datasource, param)
@@ -355,7 +352,8 @@ SqrlConfig <- function(datasource = "",
 
     # Retain the (name, value) pair, provided the name is not blank, and not
     # 'channel' (blocks setting/overwriting of this parameter), and the value
-    # is also not blank.
+    # is also not blank. When a name appears within the file multiple times,
+    # earlier values are overwritten (only the last occurrence is used).
     if ((base::nchar(param) > 0L)
         && (base::nchar(value) > 0L)
         && (param != "channel"))
@@ -375,7 +373,8 @@ SqrlConfig <- function(datasource = "",
 
   # Assign all values found (allows setting of user-invented parameter names).
   # The driver parameter is set last, to override any default driver set as a
-  # side effect in the course of setting dsn (should that have been set).
+  # side effect in the course of setting dsn (should that have been set). By
+  # the above construction, list-member (parameter) names are unique.
   params <- base::names(config)[base::names(config) != "interface"]
   params <- base::c(params[params != "driver"], params[params == "driver"])
   for (parameter in params)
@@ -384,8 +383,8 @@ SqrlConfig <- function(datasource = "",
     config[[parameter]] <- SqrlValue(datasource, parameter, value)
   }
 
-  # Return the (secrets-obscured) configuration, invisibly.
-  base::return(base::invisible(config))
+  # Return the (sorted, secrets-obscured) configuration, invisibly.
+  base::return(base::invisible(config[base::order(base::names(config))]))
 }
 
 SqrlDefault <- function(datasource = "",
@@ -619,6 +618,7 @@ SqrlDelegate <- function(datasource = "",
 
   # Obtain the stated names of the supplied arguments. This may be NULL (no
   # names at all), or a character vector (with "" for any unnamed elements).
+  # Names need not be unique.
   args.names <- base::names(args.list)
 
   # When none of the arguments are named, attempt to interpret them as a list of
@@ -627,8 +627,42 @@ SqrlDelegate <- function(datasource = "",
   if (base::is.null(args.names)
       || base::all(base::nchar(args.names) == 0L))
   {
-    # If the command specifies a file path, try sourcing SQL from that file.
-    # If autoclose is set, the channel is closed immediately afterwards.
+    # If there are at least two components to the command, and the last of them
+    # is a list of named arguments, while the others constitute the path to a
+    # file, then we pass that path to SqrlFile(), along with the arguments list.
+    # The logic here has to match that within SqrlFile()'s parameter assignment
+    # section, as does the name 'args' given to the list of named arguments.
+    # Because SqrlPath() collapses lists and vectors with "", SqrlPath(...) and
+    # SqrlPath(..., list()) yield the same path. Hence this block has to precede
+    # that below, where we check to see if the entire command specifies a file.
+    if ((args.count > 1L)
+        && (base::class(args.list[[args.count]]) == base::class(base::list()))
+        && (base::length(args.list[[args.count]]) > 0L)
+        && (!base::is.null(base::names(args.list[[args.count]])))
+        && (base::all(base::names(args.list[[args.count]]) ==
+                      base::make.names(base::names(args.list[[args.count]])))))
+
+    {
+      file.path <- SqrlPath(args.list[base::seq(args.count - 1L)])
+      if (!base::is.null(file.path))
+      {
+        result <- base::withVisible(
+                      SqrlFile(datasource, file.path, envir = envir,
+                          params = base::list(args = args.list[[args.count]])))
+        if (SqrlParam(datasource, "autoclose"))
+        {
+          SqrlClose(datasource)
+        }
+        if (!result$visible)
+        {
+          base::return(base::invisible(result$value))
+        }
+        base::return(result$value)
+      }
+    }
+
+    # If the entire command specifies a file path, try sourcing SQL from that
+    # file. If autoclose is set, the channel is closed immediately afterwards.
     file.path <- SqrlPath(...)
     if (!base::is.null(file.path))
     {
@@ -921,15 +955,18 @@ SqrlDelegate <- function(datasource = "",
     # treat any other (named) arguments as parameters to that query. It is this
     # function's responsibility to verify the existence and readability of the
     # file before passing it to SqrlFile(). If the autoclose parameter is set,
-    # then the channel is closed immediately afterwards.
+    # then the channel is closed immediately afterwards. When multiple arguments
+    # are named 'file', the first of them is taken as the query file while the
+    # others are treated as parameters to that query.
     if ("file" %in% args.names)
     {
-      file.path <- SqrlPath(args.list[["file"]])
+      index <- base::which(args.names == "file")[1L]
+      file.path <- SqrlPath(args.list[[index]])
       if (base::is.null(file.path))
       {
         base::stop("File not found.")
       }
-      params <- args.list[args.names != "file"]
+      params <- args.list[base::seq_along(args.list) != index]
       result <- base::withVisible(
                                 SqrlFile(datasource, file.path, envir, params))
       if (SqrlParam(datasource, "autoclose"))
@@ -945,11 +982,14 @@ SqrlDelegate <- function(datasource = "",
 
     # If one of the names is 'query', then pass the query to SqrlFile() (as a
     # script, not as a file name), with any other arguments as named parameters.
-    # If autoclose is set, the channel is closed immediately afterwards.
+    # If autoclose is set, the channel is closed immediately afterwards. When
+    # multiple arguments are named 'query', the first of them is taken as the
+    # query, while the others are treated as parameters of that query.
     if ("query" %in% args.names)
     {
-      script <- args.list[["query"]]
-      params <- args.list[args.names != "query"]
+      index <- base::which(args.names == "query")[1L]
+      script <- args.list[[index]]
+      params <- args.list[base::seq_along(args.list) != index]
       result <- base::withVisible(
                               SqrlFile(datasource, script, envir, params, TRUE))
       if (SqrlParam(datasource, "autoclose"))
@@ -967,40 +1007,60 @@ SqrlDelegate <- function(datasource = "",
     # value accordingly. The name 'reset' is a special case (reset specified
     # parameters to their default values). The driver parameter is set last,
     # to override any default driver that may have been set as a side effect
-    # in the course of setting the dsn parameter.
+    # in the course of setting the dsn parameter. Names need not be unique.
     if (base::any(args.names %in% SqrlParams("read-only")))
     {
       base::stop("Parameter is read-only.")
     }
     result <- base::list()
-    for (param in base::c(args.names[args.names != "driver"],
-                          args.names[args.names == "driver"]))
+    indices <- base::seq_along(args.list)
+    drivers <- args.names == "driver"
+    indices <- base::c(indices[!drivers], indices[drivers])
+    for (index in indices)
     {
+      param <- args.names[index]
       if (param == "config")
       {
-        result[[param]] <- SqrlConfig(datasource, args.list[[param]])
-      } else if (param == "interface")
-      {
-        value <- SqrlDefile(param, args.list[[param]], evaluate = FALSE)
-        result[[param]] <- SqrlInterface(datasource, value)
-      } else if (param == "reset")
-      {
-        SqrlParam(datasource, param, args.list[[param]])
+        # SqrlConfig() returns a list with unique names.
+        conf <- SqrlConfig(datasource, args.list[[index]])
+        for (cpar in base::names(conf))
+        {
+          result[[cpar]] <- conf[[cpar]]
+        }
       } else
       {
-        value <- SqrlDefile(param, args.list[[param]], evaluate = FALSE)
-        result[[param]] <- SqrlValue(datasource, param, value)
-      }
-      if (base::is.null(result[[param]]))
-      {
-        result[param] <- base::list(NULL)
+        if (param == "interface")
+        {
+          value <- SqrlDefile(param, args.list[[index]], evaluate = FALSE)
+          value <- SqrlInterface(datasource, value)
+          if (base::is.null(value))
+          {
+            result[param] <- base::list(NULL)
+          } else
+          {
+            result[[param]] <- value
+          }
+        } else if (param == "reset")
+        {
+          # SqrlParam() returns a list of default values with unique names.
+          # Default values are not secret, and so can be returned to the user.
+          values <- SqrlParam(datasource, param, args.list[[index]])
+          result[base::names(values)] <- values
+        } else
+        {
+          value <- SqrlDefile(param, args.list[[index]], evaluate = FALSE)
+          value <- SqrlValue(datasource, param, value)
+          if (base::is.null(value))
+          {
+            result[param] <- base::list(NULL)
+          } else
+          {
+            result[[param]] <- value
+          }
+        }
       }
     }
-    if (base::length(result) < 2L)
-    {
-      result <- base::unlist(result)
-    }
-    base::return(base::invisible(result))
+    base::return(base::invisible(result[base::order(base::names(result))]))
   }
 
   # When both named and unnamed arguments exist, and all named arguments trail
@@ -1052,7 +1112,7 @@ SqrlDSNs <- function(import = "all")
   #   via SqrlSources(), but it is vetted there and no further validity checks
   #   are required.
 
-  # Import a list of registered data sources (DSNs).
+  # Import a list of registered data sources (DSNs). These have unique names.
   sources <- RODBC::odbcDataSources(type = import)
 
   # Filter out Microsoft Access, dBASE, and Excel sources.
@@ -1266,10 +1326,30 @@ SqrlFile <- function(datasource = "",
   # overwriting variables within the invoking environment.
   sqrl.env <- base::new.env(parent = envir)
 
-  # Assign any supplied parameters to the processing environment.
-  for (param in base::names(params))
+  # Assign any supplied parameters to the processing environment. The supplied
+  # parameter names might not be unique, in which case the last value applies.
+  for (i in base::seq_along(params))
   {
-    base::assign(param, params[[param]], sqrl.env)
+    # When a parameter is called 'args', and is a non-empty list within which
+    # every member has a legitimate R-variable name, then individiually assign
+    # each of its members into the processing environment (rather than assigning
+    # the whole list, 'args', as a single object).
+    if ((base::names(params)[i] == "args")
+        && (base::class(params[[i]]) == base::class(base::list()))
+        && (base::length(params[[i]]) > 0L)
+        && (!base::is.null(base::names(params[[i]])))
+        && (base::all(base::names(params[[i]]) ==
+                      base::make.names(base::names(params[[i]])))))
+    {
+      for (j in base::seq_along(params[[i]]))
+      {
+        base::assign(base::names(params[[i]])[j], params[[i]][[j]], sqrl.env)
+      }
+    # Otherwise, assign the named object to the processing environment.
+    } else
+    {
+      base::assign(base::names(params)[i], params[[i]], sqrl.env)
+    }
   }
 
   # Default result. The result is a list of two components; value and visible,
@@ -2314,9 +2394,9 @@ SqrlHelp <- function(datasource = "",
   # print a link to the CRAN SQRL page (which has a PDF help file), and return.
   if (!("package:utils" %in% base::search()))
   {
-    base::return(base::cat(
-            "https://cran.r-project.org/web/packages/SQRL/index.html\n"))
+    base::return(base::cat("https://CRAN.R-project.org/package=SQRL\n"))
   }
+  #* or cat help to terminal
 
   # If the tools package (which converts Rd files) is unavailable, display the
   # pre-built (static) interface-usage help page, and return.
@@ -2340,7 +2420,7 @@ SqrlHelp <- function(datasource = "",
     driver <- base::paste0("\\file{", SqrlHelper(config[["driver"]]), "}")
   } else
   {
-    driver <- "undefined"
+    driver <- "unknown or undefined"
   }
 
   # Extract and escape the data source's (SQRL) name.
@@ -2350,6 +2430,15 @@ SqrlHelp <- function(datasource = "",
   } else
   {
     dsrc <- base::paste0("\\file{", SqrlHelper(config[["name"]]), "}")
+  }
+
+  # Establish the channel status, and choose the appropriate phrase.
+  if (base::is.null(config[["channel"]]))
+  {
+    ochan <- "closed"
+  } else
+  {
+    ochan <- "open"
   }
 
   # Construct example queries, appropriate to the source's driver.
@@ -2382,7 +2471,8 @@ SqrlHelp <- function(datasource = "",
     "\\description{",
     base::paste0("The function \\code{", iface, "} is"),
     base::paste0("the interface to the data source ", dsrc,"."),
-    base::paste0("The source's \\acronym{ODBC} driver is ", driver, "."),
+    base::paste0("The \\acronym{ODBC} driver is ", driver, "."),
+    base::paste0("Communications are ", ochan, "."),
     "}",
     "\\section{Listing Sources}{\\preformatted{",
     "# View the associated source definition.",
@@ -3232,13 +3322,40 @@ SqrlParam <- function(datasource = "",
   # parameter names for which the default values are to be restored.
   if (base::identical(parameter, "reset"))
   {
-    # Filter the supplied parameter names against the official list.
-    params <- set[set %in% SqrlParam(datasource, "*")]
+    # Retain only those (unique) parameter names that are in the official list.
+    params <- base::sort(base::unique(set[set %in% SqrlParams("all")]))
 
     # If we are left with no parameters to reset, return invisible NULL.
     if (base::length(params) < 1L)
     {
       base::return(base::invisible(NULL))
+    }
+
+    # Construct a named vector of the default values for those parameters.
+    #* what's the difference between mode and class? Use mode elsewhere?
+    #* lapply, or some other direct construction, instead of for loop?
+    news <- base::vector(base::mode(base::list()), base::length(params))
+    base::names(news) <- params
+    for (i in base::seq_along(news))
+    {
+      default <- SqrlDefault(datasource, params[i])
+      if (base::is.null(default))
+      {
+        news[i] <- base::list(NULL)
+      } else
+      {
+        news[[i]] <- default
+      }
+    }
+
+    # Retain only those parameters for which a value has been set. Any others
+    # must necessarily already be at their defaults (resetting does nothing).
+    params <- params[params %in% SqrlParam(datasource, "*")]
+
+    # When all parameters are at their defaults, invisibly return them.
+    if (base::length(params) < 1L)
+    {
+      base::return(base::invisible(news))
     }
 
     # Abort if any of the supplied parameters are write-protected ('name')
@@ -3252,6 +3369,9 @@ SqrlParam <- function(datasource = "",
     # If the connection is open, we cannot reset any locked-while-open
     # parameters (abort if such a request has been made), and we must also
     # change any visible indicators (if those parameters are to be reset).
+    # This is a bit of a kludge; here we set any visible indicators to values
+    # that are identical to their defaults, then (later, below) we remove those
+    # set values, leaving the actual defaults in place.
     if (SqrlIsOpen(datasource))
     {
       if (!override
@@ -3285,17 +3405,27 @@ SqrlParam <- function(datasource = "",
     {
       SqrlInterface(datasource, "remove")
       SqrlInterface(datasource, datasource, vital = FALSE)
+      default <- SqrlParam(datasource, "interface")
+      if (base::is.null(default))
+      {
+        news["interface"] <- base::list(NULL)
+      } else
+      {
+        news[["interface"]] <- default
+      }
       params <- params[params != "interface"]
       if (base::length(params) < 1L)
       {
-        base::return(base::invisible(NULL))
+        base::return(base::invisible(news))
       }
     }
 
-    # Remove the parameter-value definitions (restores default values), then
-    # return invisible NULL.
+    # Remove the parameter-value definitions (restores default values).
     base::remove(list = params, pos = cacheenvir)
-    base::return(base::invisible(NULL))
+
+    # Invisibly return the new parameter-values (i.e., their defaults). Default
+    # values are never secret or semi-secret, so these can go back to the user.
+    base::return(base::invisible(news))
   }
 
   # When the set argument is supplied, act as a setter (cache and return).
@@ -3699,7 +3829,7 @@ SqrlParams <- function(group = "")
   # Parameter-group definitions (find and return).
   base::return(base::switch(group,
 
-    # All parameter names, whether RODBC or SQRL, except for 'interface'.
+    # All parameter names, whether RODBC or SQRL.
     "all"                   = base::c("as.is",
                                       "autoclose",
                                       "believeNRows",
@@ -4076,8 +4206,8 @@ SqrlSource <- function(...)
     def[[1L]] <- NULL
   }
 
-  # Ensure either all terms are named, or that no term is named. When all terms
-  # are named, ensure all names are different.
+  # Ensure either all terms are named, or that no term is named. When the terms
+  # are are named, ensure all names are different (unique).
   if (!base::is.null(base::names(def)))
   {
     isnamed <- base::nzchar(base::names(def))
@@ -4107,7 +4237,7 @@ SqrlSource <- function(...)
   # Non-existent sources are quietly skipped (no error is thrown).
   if (name == "remove")
   {
-    datasources <- base::as.character(base::unlist(def))
+    datasources <- base::unique(base::as.character(base::unlist(def)))
     datasources <- datasources[datasources %in% SqrlCache("*")]
     for (datasource in datasources)
     {
@@ -4205,7 +4335,7 @@ SqrlSource <- function(...)
   # other terms will subsequently override copied values).
   if ("copy" %in% base::names(def))
   {
-    # This only returns the set (non-default) parameters.
+    # This only returns the set (non-default) parameters. Names are unique.
     params <- SqrlParam(def$copy, "*")
 
     # Don't copy parameters we shouldn't (name, interface, etc.).
@@ -4257,7 +4387,7 @@ SqrlSource <- function(...)
 
   # Iterate over all other terms (besides 'copy', 'config', and 'interface'),
   # treating each as a SQRL/RODBC parameter. The incomplete source is deleted
-  # upon any error.
+  # upon any error. The uniqueness of names has been asserted, above.
   params <- base::names(def)
   params <- params[!(params %in% base::c("copy", "config", "interface"))]
   params <- base::c(params[params != "driver"], params[params == "driver"])
@@ -4831,7 +4961,7 @@ SqrlValue <- function(datasource = "",
       if (base::grepl(pattern, value, ignore.case = TRUE))
       {
         # Construct regular expression patterns for each of the non-secret
-        # values (blank, <pwd>, and so on).
+        # values (blank, <pwd>, and so on). These are unique.
         ignorables <- SqrlParams("substitutable")
         ignorables <- ignorables[ignorables %in% SqrlParams("secret")]
         if (base::length(ignorables) > 0L)
@@ -5014,7 +5144,7 @@ sqrlInterface <- function(...)
 
 sqrlOff <- function()
 {
-  # Close SQRL (optionally also all other RODBC) channels, deactivate SQRL.
+  # Close SQRL channels, deactivate SQRL.
   # Args:
   #   None.
   # Returns:
@@ -5144,7 +5274,7 @@ sqrlSources <- function(...)
   # Remove any SQRL temp files from the R-session temp directory.
   SqrlHelp(clean = TRUE)
 
-  # Attempt to detach the public SQRL:Face environment, if it not already done.
+  # Attempt to detach the public SQRL:Face environment, if not already done.
   if ("SQRL:Face" %in% base::search())
   {
     base::try(base::detach("SQRL:Face"))
