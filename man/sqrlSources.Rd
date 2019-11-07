@@ -15,10 +15,10 @@ sqrlSources(...)
   \item{...}{
 An optional character string.
 If set to one of \dQuote{all}, \dQuote{user}, or \dQuote{system}, then a call is
-made to \code{\link[RODBC:odbcDataSources]{RODBC:odbcDataSources}} (with the
+made to \code{\link[RODBC:odbcDataSources]{RODBC::odbcDataSources}} (with the
 corresponding \var{type} value) to re-examine that class of data source names
 (\acronym{DSN}s) and import all those found.
-If set to \dQuote{remove}, then all currently defined sources are deregistered. 
+If set to \dQuote{remove}, then all currently defined sources are deregistered.
 }
 }
 \value{
@@ -51,8 +51,8 @@ sqrlSources()
 # Here, there are two data sources; 'order' and 'chaos'.
 # The interface to 'chaos' is a function of the same name.
 # No interface has yet been defined for 'order' (use of
-# that name is prevented due to its conflicting with the 
-# base:order function). Neither source (channel) is open.
+# that name is prevented due to its conflicting with the
+# base::order function). Neither source (channel) is open.
 }
 
 # Remove all sources.

@@ -4,9 +4,9 @@
 Define New Data Sources
 }
 \description{
-Defines new data sources and creates the interface functions for communicating
-with them.
-Can also redefine and/or delete existing sources.
+Defines (registers) new data sources and creates the interface functions for
+communicating with them.
+Can also redefine or delete (deregister) existing sources.
 }
 \usage{
 sqrlSource(...)
@@ -35,7 +35,7 @@ a \acronym{DSN}.
 
 Alternatively, the arguments may instead be supplied as a single string followed
 by at least one named \var{parameter = value} pair.
-In this usage, the leading string is taken for the new source name, while the 
+In this usage, the leading string is taken for the new source name, while the
 named pairs constitute its definition.
 The named pairs may represent components of a connection string, and/or
 \pkg{SQRL} parameter values to be applied (see \code{\link{sqrlParams}}).
@@ -49,21 +49,21 @@ the remaining names do not include \dQuote{dsn}, or they do include some other
 name not recognised as being a \pkg{SQRL} parameter, then those pairs are
 concatenated into a connection string.
 
-Whichever form is used, the new interface name (which defaults to the source 
-name) must not conflict with that of any other object on the \R search path (or
+Whichever form is used, the new interface name (which defaults to the source
+name) must not conflict with that of any function on the \R search path (or
 else an error will be thrown).
 
 Redefinition of an existing source is allowed, provided it is closed.
 
-When the source name is \sQuote{remove}, the definition is interpreted as a list
+When the source name is \dQuote{remove}, the definition is interpreted as a list
 of sources to be deregistered.
-This precludes the use of \sQuote{remove} as a source name.
+This precludes the use of \dQuote{remove} as a source name.
 Alternatively, redefining a source to \code{NULL} also deregisters the source.
 }
 \value{
 Invisibly returns the interface function name, after defining the new source and
 creating that interface.
-In general, this need not match the name of the source itself. 
+In general, this need not match the name of the source itself.
 }
 \note{
 Source definitions are not checked for validity (specified connection strings
@@ -105,33 +105,57 @@ sqrlSource("knossos",
             "dbcname=Knossos;uid=theseus;pwd=<pwd>",
             "driver=/opt/teradata/client/16.10/lib64/tdata.so")
 
-\dontrun{
-# Define a new source from a configuration file.
-sqrlSource(minos = "path/to/minos.config")
+# Create a configuration file.
+config.file <- tempfile()
+writeLines(c("connection = DSN=Crete;UID=Aegeus",
+             "readOnlyOptimize = TRUE",
+             "autoclose = TRUE"),
+           config.file)
+
+# Define a new source from that config file.
+sqrlSource(minos = config.file)
+
+# A new (overwritten) configuration file.
+writeLines(c("autoclose = FALSE",
+             "stringsAsFactors = FALSE"),
+           config.file)
 
 # Define a new source, ariadne, as a copy of the existing
-# source, minos, then apply the configuration file conf.txt
+# source, minos, then apply the (new) configuration file
 # over that, and then set both the connection string and
 # interface function name (parameter values) over those.
 sqrlSource("ariadne",
             copy = "minos",
-            config = "conf.txt",
+            config = config.file,
             connection = "DSN=Knossos",
             interface = "a")
-            
+
+# Review the configuration of the ariadne source.
+a("config")
+
+# Another new (overwritten) config file.
+writeLines(c("dsn = Labyrinth",
+             "interface = L"),
+           config.file)
+
 # Source names may conflict with those of preexisting
-# R objects, provided that the config file defines a 
+# R functions, provided that the config file defines a
 # conflict-free name for the source's interface function.
-sqrlSource("c", "path/to/", "c.config")
-}
+sqrlSource("ls", dirname(config.file), "/", basename(config.file))
 
 # Review defined sources.
 sqrlSources()
 
 # Remove two of the sources.
-sqrlSource("remove", c("daedalus", "knossos"))
+sqrlSource(remove = c("daedalus", "knossos"))
 
 # Remove another.
 sqrlSource(icarus = NULL)
+
+# And another.
+sqrlSource("remove", "minos")
+
+# Clean-up.
+unlink(config.file)
 }
 \keyword{database}

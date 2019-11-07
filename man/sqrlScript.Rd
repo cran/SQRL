@@ -1,296 +1,806 @@
 \name{sqrlScript}
 \alias{sqrlScript}
 \title{
-Combined Language Scripts
+Hybrid Script Syntax
 }
 \description{
-This material does not describe a function, but (rather) the \acronym{SQRL}
-script file format for \acronym{SQL} with embedded \R.
+This material does not describe a function, but (instead) the \acronym{SQRL}
+scripting syntax for \acronym{SQL} with embedded \R.
 
 For instructions on how to submit (run) these scripts from file, refer to
 \code{\link{sqrlUsage}}.
+}
+\section{Script #01 (Pure SQL)}{
+\preformatted{
+use database;
+select * from table;
+}
+\subsection{Commentary on Script #01}{
+Multi-statement \acronym{SQL} scripts can be taken directly from
+\file{SQL Developer} (or similar application), and (usually) run without
+modification.
+The \pkg{SQRL} parser identifies statement-terminating semicolons, and submits
+each statement in turn, as those semicolons (or the end of the script) are
+encountered.
+}
+}
+\section{Script #02 (SQL, with R in it)}{
+\preformatted{
+select isotope from periodic_table
+where atomic_number = <R> Z </R>
+}
+\subsection{Commentary on Script #02}{
+Scripts can be parameterised, via embedded \R.
+In \acronym{SQRL}, \acronym{XML}-style tags mark the beginning and end of an \R
+block.
+As shown in \code{\link{sqrlUsage}}, values can either be passed explicitly, or
+inherited from the calling environment.
+Embedded \R is not restricted to the insertion of values for filtering, and can
+be used to specify column names, clauses, or entire \acronym{SQL} statements.
 
-The following (very simple) example scripts won't necessarily work with
-your own version of \acronym{SQL} or your own data source.
+Tags are not case sensitive.
 }
-\section{Example Script #1 (Multiple Statements)}{
+}
+\section{Script #03 (Comments, and Arbitrary R)}{
 \preformatted{
--- My file
-select 1;
-select 2;
-select 3;
-}
-\subsection{Commentary on Example Script #1}{
-Multi-statement \acronym{SQL} files can be copied directly from
-\dQuote{SQL Developer} (or similar application).
-Each of the (above) three queries will be submitted in turn.
-Only the final result will be returned to the \R calling environment (in this
-case, a data frame containing a single value of 3).
-}
-}
-\section{Example Script #2 (Embedded \R)}{
-\preformatted{
--- This is SQL
+/* SQL-comment within SQL */
+-- SQL-comment within SQL
 select
   <R>
-    # This is R
-    if (exists("x")) {
-      x
-    } else {
-      0
-    }
+    /* SQL-comment within R */
+    -- SQL-comment within R
+    # R comment within R
+    letter <- sample(letters, 1)
+    paste0("'", letter, "'")
   </R>
-/* This is SQL */
-from
-  dual
 }
-\subsection{Commentary on Example Script #2}{
-\pkg{SQRL} supports the embedding of \R within \acronym{SQL}, via
-\acronym{XML}-style tags (\code{<R> ... </R>}), as above.
-This enables (explicitly and/or implicitly) parameterised \acronym{SQL} queries.
+\subsection{Commentary on Script #03}{
+The parser supports \R comments, and two kinds of \acronym{SQL} comments.
+For syntax-highlighting purposes, \acronym{SQL} comments may be used within \R
+sections (but \R comments cannot be used within \acronym{SQL}).
+Since \code{a -- b} is legitimate \R, it would need to be rewritten with a space
+between the minus signs, or as \code{a + b}, to avoid being interpreted as a
+comment.
+% In the PDF manual, \code{a -- b} and \code{a - -b} both appear as 'a --b',
+% hence the wording of the above sentence.
 
-In this example (above), if the variable \var{x} was explicitly passed to the
-query, then the supplied value will be used (see \code{\link{sqrlUsage}}).
-If \var{x} was not explicitly passed, then it can be inherited (implicitly
-passed) from the calling environment.
-In this case, if \var{x} was not explicitly supplied and also does not \var{x}
-exist within the calling environment, then a default value of 0 will be used.
-
-\acronym{SQL} comments are allowed within \R (\code{<R> ... </R>}) sections, so
-that \acronym{SQL} syntax highlighting can be better applied to the file.
-\R comments are not allowed within \acronym{SQL} sections
-
-Nested \acronym{SQL} queries can be made from within \code{<R> ... </R>} tags.
-However, \code{<R> ... </R>} tags cannot be nested.
+Otherwise-arbitrary \R script is allowed within (tag-delimited) \R sections.
+Evaluation of such \R script takes place in a temporary child environment of the
+calling environment.
+The final result of that evaluation is then pasted into the surrounding
+\acronym{SQL}, before its submission.
+This mechanism cannot be used to insert additional tags into the \acronym{SQRL}
+script.
 }
 }
-\section{Example Script #3 (Manipulation and Feedback)}{
+\section{Script #04 (Procedural Language Blocks)}{
 \preformatted{
--- SQL statement, ending on a semicolon.
-use mydatabase;
+select 1 from dual; -- This semicolon terminates the statement.
 
-/* SQL statement, ending on a <do> tag. */
-create table mynewtable
-as select columnA, columnB
-from originaltable
-<do>
+declare
+  x integer := 0;
+begin
+  for i in 1..10 loop
+    x := x + 1;
+    if x > 7 then
+      x := 0;
+    else
+      begin
+        null;
+      end;
+    end if;
+  end loop;
+end; -- This semicolon terminates the block.
 
--- SQL query, ending on a <result> (assignment) tag.
--- In this case, the result of the query (a data frame)
--- is assigned to an R variable 'a' (within a temporary
--- working environment communal to this script).
-select max(columnA)
-from mynewtable
-<result -> a>
-
-# Manipulate the result in R, then
-# proceed to the next SQL statement.
-b <- runif(1)
-a <- as.numeric(a) + b
-<do>
-
--- Use the earlier result in a new query.
-select columnA, columnB from mynewtable
-where columnA > <R> a * b </R>
-and columnB < <R> z <- 5; z + 2 </R>
-<result -> x>
-
--- Only the result of the final operation
--- is returned at the end of the script.
-return(list(minA = min(x$columnA),
-            maxB = max(x$columnB))
+select 2 as N from dual
 }
-\subsection{Commentary on Example Script #3}{
-\acronym{SQL} statements are terminated by any one of a semicolon, a \code{<do>}
-tag, a \code{<result>} tag, or the end of the file.
-After a \code{<result>} tag, statements are interpreted as \R (as opposed to
-\acronym{SQL}) until either a \code{<do>} tag, or the end of the file, is
-encountered.
-Following a \code{<do>} tag, statements are interpreted as \acronym{SQL}.
+\subsection{Commentary on Script #04}{
+As with statement-terminating semicolons (refer to script #01), the \pkg{SQRL}
+parser attempts to identify procedural-language block-terminating semicolons,
+and submits each such block as those semicolons are encountered.
+The parser also submits (when necessary) upon reaching the end of the script.
+Although trailing semicolons are not usually mandatory for \acronym{SQL}
+statements, they usually are mandatory at the end of a procedural block.
 
-In the case of a \code{<result -> var>} tag, the \acronym{SQL} query result is
-assigned to an \R variable \var{var} within the script's temporary working
-environment.
-This variable can be arbitrarily manipulated in \R, and the result of that
-manipulation used as part of a subsequent \acronym{SQL} query.
+If you have a script that came with forward-slashes, /, at the end
+of procedural blocks, those slashes will normally need to be removed (as, say,
+\file{SQL Developer} would do for you).
 
-With the exception of the name of the target (assignment) variable within a
-\code{result} tag, tags are not case sensitive.
-When the name of the target variable is either \dQuote{null} or \dQuote{NULL},
-then the query result is not assigned into the working environment (as with a
-\code{<do>} tag), but the subsequent script is still interpreted as \R (unlike
-with a \code{<do>} tag).
-
-After the end of the script, the working environment is lost, along with any
-variables within it.
-Only the final result is returned to the calling environment.
+When a script contains multiple statements and/or blocks, only the final result
+is returned.
+In this case, that would be \code{data.frame(N = 2L)}.
 }
 }
-\section{Example Script #4 (\R and Lists)}{
+\section{Script #05 (R, out of SQL)}{
 \preformatted{
--- R sections can be used to set temporary variables.
 <R>
-  columns <- list("columnA", "columnB")
-  wordlist <- list("'red'", "'blue'")
-  conditions <- c("and columnA < 2", "and columnD > 4")
+  if (!exists("date", inherits = FALSE))
+    date <- format(Sys.Date(), "\%Y-\%m-\%d");
+
+  date <- paste0("'", date, "'")
+
+; -- This semicolon terminates the R section.
+
+select * from database.table
+where event_date = <R> date </R>
+}
+\subsection{Commentary on Script #05}{
+As in scripts #02 and #03, when an \R section ends with \code{</R>}, the result
+of evaluating that section is pasted into the surrounding \acronym{SQL} (or
+implied \acronym{SQL}, if those surroundings are blank).
+However, an \R section can also be terminated by a non-syntactical semicolon;
+that being one with nothing but whitespace between it and the previous
+semicolon, newline, or \code{<R>} tag.
+Such sections are evaluated in the same way as those ending in \code{</R>} tags,
+but the results are not pasted into \acronym{SQL}.
+These sections can only appear between, not within, \acronym{SQL} statements.
+
+In this script, an out-of-\acronym{SQL} \R section is used to set a (default)
+value for a variable, \var{date}, if no value was explicitly passed in (see
+\code{\link{sqrlUsage}}).
+It then wraps the character representation of \var{date} in single quotes (to
+make it \acronym{SQL}-friendly).
+}
+}
+\section{Script #06 (The sqrl Function)}{
+\preformatted{
+<R>
+  stopifnot(sqrl("name") == "MySource")
+
+  sqrl(as.is = TRUE,
+       stringsAsFactors = FALSE,
+       visible = TRUE)
+;
+
+select * from database.table
+}
+\subsection{Commentary on Script #06}{
+The function \code{sqrl(...)} is a special interface that is automatically
+defined into the temporary script-evaluation (working) environment.
+It acts as a cut-down \code{\link{sqrlAll}}, relaying its
+arguments only to whichever \pkg{SQRL} data source is executing the script.
+It works even when the name of the invoking interface function changes, or
+when that interface function does not exist.
+Consequently, \code{sqrl} should be adopted in preference to hard-coding
+interface names into scripts.
+
+Here, the \code{sqrl} function is first used to provide an assert, which, in
+this case, verifies the script is being run only on the intended data source.
+After that, a second call of \code{sqrl(...)} is used to set three
+(\pkg{RODBC}/\pkg{SQRL}) parameters before any \acronym{SQL} is submitted.
+Due to \pkg{SQRL}'s set-and-forget approach, these changes are persistent
+(parameter values will remain in effect after execution of the script).
+The restoration of initial values is covered by example script #09.
+
+As shown in script #16, the \code{sqrl} function can also be used to make nested
+queries (its arguments could just as easily be another script).
+
+When a script is being run from some particular interface, explicit calls to
+that same interface function (as opposed to \code{sqrl}) are normally blocked.
+Calls to \code{\link{sqrlAll}}, \code{\link{sqrlInterface}},
+\code{\link{sqrlOff}}, \code{\link{sqrlSource}}, and \code{\link{sqrlSources}}
+are also normally blocked.
+If you really want a way around these blocks, calls can be made to
+\code{SQRL::sqrlAll}, instead of just \code{sqrlAll}, and so on.
+Alternatively, \code{<R> rm("sqrlAll") <do>} (et cetera) removes the block (this
+also works for unblocking the interface function).
+}
+}
+\section{Script #07 (Parser Control)}{
+\preformatted{
+-- Change parser to fallback mode.
+<R>
+  sqrl(scdo = FALSE);
+<do> -- This tag terminates the section.
+
+-- The default (scdo = TRUE) SQRL parser would
+-- not find the end of this procedural block.
+begin
+  null;
+end /**/ ;
+<do> -- This tag terminates the block.
+
+select 1 from dual; -- Semicolon ignored.
+<do> -- This tag terminates the statement.
+
+select 2 from dual
+}
+\subsection{Commentary on Script #07}{
+While the parser reliably detects terminal semicolons at the ends of
+\acronym{SQL} statements and \R sections, it remains unsophisticated, and
+ignorant of \acronym{DBMS}-specific procedural-language syntaxes.
+That being the case, if you are working with procedural-language extensions to
+\acronym{SQL}, sooner or later the parser will fail to detect the end of a
+block.
+Presently, a simple thing that causes this is the presence of a comment between
+an \code{end} and its semicolon (as appears, above).
+
+Setting the \var{scdo} parameter to FALSE causes the parser to ignore semicolons
+and to conclude (out of \acronym{SQL}) \R sections, \acronym{SQL} statements,
+and procedural blocks only upon encountering a \code{<do>} tag.
+This provides a robust multi-statement capability when need be, but will
+require appropriate modification of any scripts originally developed for some
+other application.
+
+Note that \code{<do>} tags function irrespective of the \var{scdo} setting.
+That being the case, the use of these can be preferable to semicolons when
+a \acronym{SQRL} script is developed from scratch.
+When \var{scdo} is \code{TRUE}, and a terminating semicolon is followed by a
+\code{<do>} tag, with nothing but whitespace between them, they are treated as a
+single \code{<do>} (only one submission is made).
+An implied \code{do} tag exists at the end of every script.
+}
+}
+\section{Script #08 (Manipulation of Results)}{
+\preformatted{
+select
+  calDate, Snowfall
+from
+  Weather.SparseDailySnowfall
+where
+  calYear = <R> year </R>
+
+-- Submit the above, assign the result to 'a',
+-- and immediately begin an R section.
+<result -> var>
+
+  names(var)[names(var) == "calDate"] <- "Date"
+  first <- as.Date(paste(year, 1, 1, sep = "-"))
+  last <- as.Date(paste(year, 12, 31, sep = "-"))
+  alldates <- data.frame(Date = seq(first, last, 1))
+  merge(alldates, var, all.x = TRUE)
+}
+\subsection{Commentary on Script #08}{
+A \code{<result>} tag acts as a combination of the \code{<do>} and \code{<R>}
+tags, wherein the result of the query is assigned to an object within the
+working (script evaluation) environment.
+Any syntactically valid \R variable name could be used in place of \var{var}.
+Whilst the main tag is not case sensitive, the name of the variable is.
+
+An \R section begins immediately after the \code{<result>} tag.
+This can be useful when preferred \R column names are reserved \acronym{SQL}
+keywords (such as \dQuote{date}), when dates come back in unconventional
+formats (and need conversion), when strict type-conversion control is required
+(typically in combination with \code{as.is = TRUE}), or when data is sparse
+(zero-valued entries are not stored) and results need to be expanded to
+explicitly include the implied zero-valued data.
+The net effect is a single script, combining \acronym{SQL} data extraction with
+\R reformatting.
+
+Using \dQuote{null} or \dQuote{NULL} as the variable name stops assignment of
+the query result (but the \R section still begins).
+
+Only the final value of any \acronym{SQRL} script is returned.
+In this example, that value is the merged data frame.
+
+Note that \code{<result>} tags cannot be used to conclude \R sections.
+Also, \R sections beginning with \code{<result>} tags cannot end in \code{</R>}.
+
+When \var{scdo} is \code{TRUE}, and a terminating semicolon is followed by a
+\code{<result>} tag, with nothing but whitespace between them, they are treated
+as a single \code{<result>} tag (only one query submission is made).
+However, when a \code{<do>} tag is followed by a \code{<result>} tag, two
+submissions are made, irrespective of \var{scdo}.
+First, the query before the \code{<do>} is submitted, and then the (blank) query
+between the \code{<do>} and the \code{<return>}.
+In \pkg{SQRL}, blank queries (blank \acronym{SQL} statements) are always
+allowed, and return no value.
+}
+}
+\section{Script #09 (Restoring Settings)}{
+\preformatted{
+<R>
+  -- Record initial parameter values.
+  initials <- sqrl("settings")
+
+  -- Alter values to suit this script.
+  sqrl(as.is = TRUE,
+       scdo = FALSE,
+       stringsAsFactors = FALSE,
+       verbose = TRUE)
 <do>
 
--- Now the query.
-select
-  <R> columns </R>
-from
-  dbname.tablename
-where
-  columnC in (<R> wordlist </R>)
-  <R> conditions </R>
+-- Submit this query, saving the result.
+select '01'
+<result -> out>
+<do>
 
--- End the script here.
--- The statements below are ignored.
-<stop>
-  and columnA > 0
+<R>
+  -- Restore initial parameter values.
+  sqrl(initials)
+
+  -- Return the result of the query.
+  out
 }
-\subsection{Commentary on Example Script #4}{
-Whereas \code{<R> ... </R>} sections are embedded within \acronym{SQL} (which
-may be blank), \code{<R> ... <do>} sections exist outside of any \acronym{SQL}.
-While the result of an \code{<R> ... </R>} section is substituted back into the
-surrounding \acronym{SQL} (and will form part of the query), an
-\code{<R> ... <do>} section is simply evaluated within the script's working
-environment.
-Although a \code{<result -> null> ... <do>} section may be preceded by
-\acronym{SQL} (which will be submitted prior to evaluating the section), an
-\code{<R> ... <do>} section may not be (the two sections being otherwise
-equivalent).
-
-Lists are inserted comma collapsed.
-Vectors are inserted newline collapsed.
-
-A \code{<stop>} tag imitates the end of the file, and can be used to interrupt a
-script for debugging.
+\subsection{Commentary on Script #09}{
+Because changes to \pkg{SQRL}/\pkg{RODBC} parameter values are persistent (see
+script #06), it can be preferable to restore initial values at the end of a
+script that modifies any.
+Because only the result of the final operation is returned, it is necessary to
+save the output of the query before restoring initial parameter settings, so
+that the final operation can be a recall of that query output.
+The \command{settings} command is described in \code{\link{sqrlUsage}}.
 }
 }
-\section{Example Script #5 (If, While, and Return)}{
+\section{Script #10 (Feedback of Intermediate Results)}{
 \preformatted{
-/* Implements drop-if-exists in a SQL that doesn't. */
+select distinct customer_number from our.customers
+where town in (<R> paste0("'", towns, "'") </R>)
 
--- Pull details of temporary tables.
-help volatile table
-<result -> a><do>
+<result -> z>; -- Same thing as <result -> z><do>
 
--- If those details are a data frame, then
--- at least one temporary table exists.
-<if (class(a) == class(data.frame()))>
-  <R> i <- 1 <do>
+select sum(transactions) from online.orders
+where customer_number in (<R> z$customer_number </R>)
+}
+\subsection{Commentary on Script #10}{
+This script takes one parameter, \var{towns}, a character vector.
+By default, atomic vectors are pasted into \acronym{SQL} as comma-separated
+values.
+The first query returns a data frame, which we save, as \var{z}, but have no
+need to manipulate.
+Its (integer-valued) \var{customer_number} column is then applied to the second
+query, once again as comma-separated values.
+Only the final result (of the second query) is returned.
 
-  -- Drop each table in turn.
-  <while (i <= nrow(a))>
-    drop table <R> a[i, "Table Name"] </R> <do>
-    <R>
-      print(paste("dropped", a[i, "Table Name"]))
-      i <- i + 1
-    <do>
-  </while>
+Of course, this particular example could instead have been implemented with a
+join, or temp table.
 
-  -- Exit from here.
-  <return (paste(i - 1, "tables dropped"))>
+The pasting behaviour of atomic objects is controlled by the \var{aCollapse}
+parameter.
+Similarly, the pasting behaviour of list-like objects is controlled by the
+\var{lCollapse} parameter (which defaults to the empty string).
+To restore \pkg{SQRL}-0.6.3 pasting rules, insert
+\code{<R>sqrl(aCollapse = "\n", lCollapse = ", ")<do>} at the top of a script.
+See \code{\link{sqrlUsage}} and \code{\link{sqrlParams}} for further detail.
+}
+}
+\section{Script #11 (Combining Data Sources)}{
+\preformatted{
+<R>
+  n <- OtherSource("select distinct customer_number ",
+                   "from our.customers where town in "
+                   "(" paste0("'", towns, "'") ")")
+<do>
+
+select sum(transactions) from online.orders
+where customer_number in (<R> n$customer_number </R>)
+}
+\subsection{Commentary on Script #11}{
+This is a repeat of script #10, except now the tables of the first and second
+queries are hosted on two entirely separate data sources.
+The function \code{OtherSource} is the \pkg{SQRL} interface to the data source
+of the first query, while this script should be run from the interface to the
+final source.
+Again, there are other ways to do this, but the general idea is for the main \R
+script (performing the modelling and analysis) to make a single call
+\dQuote{get me this data}, without clutter, or concern for the true horror of
+where that data comes from.
+}
+}
+\section{Script #12 (Closing Connections)}{
+\preformatted{
+-- Ensure readOnlyOptimise is TRUE.
+<R>
+  if (!sqrl("readOnlyOptimize"))
+  {
+    sqrl("close")
+    sqrl(readOnlyOptimize = TRUE)
+  }
+<do>
+
+-- Pull data (reopening is automatic).
+select * from database.table;
+
+-- Close the connection.
+<close>
+}
+\subsection{Commentary on Script #12}{
+Many communications parameters are \dQuote{locked while open}, and cannot be
+changed while a connection (channel) exists to the source (see
+\code{\link{sqrlParams}}).
+In this example, we want a particular value for one such parameter, namely
+\var{readOnlyOptimize}.
+If its value needs changing, we must first ensure the channel is closed.
+Within the \R section, this is achieved with \code{sqrl("close")} (see
+\code{\link{sqrlUsage}}).
+
+When the \acronym{SQL} query is submitted, \pkg{SQRL} will automatically open a
+new connection, if need be.
+
+After the data is pulled, the \code{<close>} tag closes the channel (because, in
+this example, we do not want to leave it open).
+Unlike \code{<R>sqrl("close")<do>}, \code{<close>} tags return no value of their
+own, which means the final value of this \acronym{SQRL} script is still that of
+the query (as we require).
+
+Be aware that \code{<close>} does not imply \code{<do>}, and it is an error to
+use \code{<close>} in the presence of partially-formed, or unsubmitted,
+\acronym{SQL}.
+Conversely, \code{<R>sqrl("close")</R>} is allowed within \acronym{SQL}.
+
+An alternative to putting \code{<close>} at the end of a script is to set the
+\var{autoclose} parameter to \code{TRUE} (see \code{\link{sqrlParams}}).
+Placing \code{<close>} at the beginning of a script can be used to ensure no
+temporary tables are in existence (when no better mechanism is available).
+
+When user-input is required for authentication on the opening of a new channel,
+connection closures should be kept to a bare minimum.
+}
+}
+\section{Script #13 (Returns)}{
+\preformatted{
+-- This selects 1 (the result of the embedded R expression).
+select <R> return(1); 2 </R>
+
+-- This return doesn't exit the script either (only the R section).
+<R>
+  return(1)
+  print("this won't be printed")
+<do>
+
+-- Pull from a temporary table, and save the result.
+select some_columns from temp_table
+<result -> a>;
+
+-- Drop the temp table (this returns a value).
+drop temp_table;
+
+-- Return the value of interest (exit the script).
+<return (a)>
+
+-- This is unreachable.
+select 1
+}
+\subsection{Commentary on Script #13}{
+The difference between a \code{<return (a)>} and \code{<R>return(a)<do>}, is
+that the former exits the \acronym{SQRL} script, while the latter only exits
+from the (embedded) \R section (back into \acronym{SQL}), before continuing with
+the script.
+
+Almost any valid \R expression is allowed between the (mandatory) parentheses of
+a \code{<return>} tag (see script #03).
+Note that \code{<return>} tags are not recognised within \R sections.
+Also, \code{<return>} tags do not imply \code{<do>}, and it is an error to
+attempt a \code{<return>} within partially-formed (unsubmitted) \acronym{SQL}.
+Because \code{x <- y} returns invisibly, so too do \code{<R> x <- y <do>} and
+\code{<return (x <- y)>} (see example script #15).
+
+The next example shows how \code{<return>} tags become much more useful when
+combined with conditional expressions.
+}
+}
+\section{Script #14 (If, Else If, Else)}{
+\preformatted{
+-- Submit this when we have a 9-digit code.
+<if (nchar(code) == 9)>
+  select category from item_category
+  where long_item_code = <R> code </R>
+  <result -> k> k <- as.integer(k) <do>
+
+-- Submit this when we have a 6-digit code.
+<else if (nchar(code) == 6)>
+  select category from item_category
+  where short_item_code = <R> code </R>
+  <result -> k> k <- as.integer(k) <do>
+
+-- Exit here when we have neither
+-- (because the next query would fail).
+<else>
+  <return (NULL)>
 </if>
 
--- Otherwise, we had no temps to drop.
-<return ("no temps found")>
-}
-\subsection{Commentary on Example Script #5}{
-Within \acronym{SQL} sections, \code{<if>} and \code{<while>} tags can be used
-to control the (repeated) submission of queries.
-The parentheses enclosing the conditional \R expression are mandatory, and that
-expression must evaluate to a Boolean singleton.
-
-Within \acronym{SQL} sections, \code{<return>} tags can be used to exit early
-from a script.
-A return value (\R expression) is mandatory, and it must be enclosed in
-parentheses.
-Calling the base \code{return} function inside an \R section does not exit the
-script; it merely sends a value to the temporary working environment.
-
-A difference between \code{<return>} and \code{<stop>}, is that the latter
-ignores conditionals; \code{<stop>} applies even when nested within an
-\code{<if>} that evaluated to \code{FALSE}.
-}
-}
-\section{Example Script #6 (Compact Variant)}{
-\preformatted{
-help volatile table <result -> a>;
-<if (i <- 0; class(a) == class(data.frame()))>
-  <while (i <- i + 1; i <= nrow(a))>
-    drop table <R> a[i, "Table Name"] </R>;
-    <R> print(paste("dropped", a[i, "Table Name"]));;
-  </while>
-  <return (paste(i - 1, "tables dropped"))>
-</if>
-<R> "no temps found"
-}
-\subsection{Commentary on Example Script #6}{
-This is an alternative implementation of example #5.
-
-Multiple \R statements are allowed within conditional tag expressions.
-In the case of while loops, all statements within the tag expression are
-evaluated on each iteration.
-The condition takes the value of the final statement, which must evaluate to
-either \code{TRUE} or \code{FALSE}.
-
-Semicolons can be used to terminate \R sections (as well as \acronym{SQL}
-statements).
-Within an \R section (following either an <R> or a <result> tag), if there is
-nothing but whitespace (or nothing at all) between a semicolon and the start of
-its line, the previous semicolon, or the start of the \R section (whichever
-comes first, heading left from the semicolon), then that semicolon marks the
-end of the \R section and is equivalent to a \code{<do>} tag (the subsequent
-script is read as \acronym{SQL}).
-So located semicolons are not accepted by \R's parser.
-}
-}
-\section{Example Script #7 (Else and Else If)}{
-\preformatted{
+-- Obtain all items in the same category,
+-- in the original (long or short) format.
 select
-  <if (dow == "Monday")>
-    ColumnA
-  <else if (dow \%in\% c("Saturday", "Sunday"))>
-    ColumnB, ColumnC
+  category,
+  <if (nchar(code) == 9)>
+    long_item_code
   <else>
-    *
+    short_item_code
   </if>
-from
-  some.table
+from item_category
+where category = <R> k </R>
 }
-\subsection{Commentary on Example Script #7}{
-The closing tags, \code{</if>} and \code{</while>}, do not imply \code{<do>}.
-This allows switching column names, or other \code{SQL} fragments, in and out of
-a larger query.
+\subsection{Commentary on Script #14}{
+In this example, we have a table of (say) stock items, each of which has both a
+long (9 digit) and short (6 digit) identity code, and is assigned to some kind
+of category (with another integer identifier).
+The script takes a single integer argument, \var{code}, which might be in either
+the long or short format.
 
-The same end can be achieved through embedded \R (\code{<R> ... </R>} tags), or
-other mechanisms.
-In the above, \var{dow} is an externally supplied parameter (see example #2).
+The \code{<if>} and \code{<else if>} tags are used to submit an appropriate
+query, according to the type of identity code supplied.
+In the event that the code is of an unrecognised type, the \code{<else>} tag is
+used, with \code{<return>}, to exit cleanly (without submitting any query).
+Provided that the code is of a recognised type, a second query is submitted,
+wherein \code{<if>} and \code{<else>} control which column is selected.
 
-The parser is simple, and does not enforce correct nesting structure.
+In the final query, the appropriate column could instead have been named from
+within \code{<R>} and \code{</R>} tags, but the earlier conditional submission
+and conditional return cannot easily be achieved in that way.
+Essentially arbitrary \R is allowed between the (mandatory) parentheses of an
+\code{<if>} or \code{<else if>} tag (see script #03), but the final result of
+evaluating that \R must be either \code{TRUE} or \code{FALSE}.
+None of these tags are recognised within \R sections.
+To enable their intra-statement application (as in the final query of the
+example script), none of these tags imply \code{<do>}.
+The space in \code{else if} is optional (i.e., \code{elseif} is equally valid).
+}
+}
+\section{Script #15 (While Loops)}{
+\preformatted{
+<R>
+  batch <- split(ID, ceiling(seq_along(ID) / 1000))
+  x <- NULL
+  i <- 1
+<do>
+
+-- Pull and accumulate results, a thousand at a time.
+<while (i <= length(batch))>
+  select idnumber, name from identity_lookup
+  where idnumber in (<R> batch[[i]] </R>)
+  <result -> y>
+    i <- i + 1
+    x <- rbind(x, y)
+  <do>
+</while>
+}
+\subsection{Commentary on Script #15}{
+In this example, we have a script with a single argument; \code{ID}, a vector of
+integer codes.
+Supposing that vector might be too long for the \acronym{SQL} \code{in}
+operator, a \code{<while>} loop is used to pull the results in batches.
+
+Essentially arbitrary \R is allowed between the (mandatory) parentheses of a
+\code{<while>} tag (see script #03), but the final result of evaluating it must
+be either \code{TRUE} or \code{FALSE}.
+As with the \code{<if>} family, \code{<while>} and \code{</while>} tags are not
+recognised within \R sections, and do not imply \code{<do>}.
+Ordinarily, loops over \acronym{SQL} should be avoided, or used only as a last
+resort, but there are use-cases (see script #17), including for the insertion of
+rows.
+
+Referring back to script #13, the final result of script #15 (that of
+\code{x <- rbind(x, y)}) is invisible.
+If visible output is required, \code{<R>x} or \code{<return (x)>} could be
+appended to the script.
+
+The parser is simple, and does not verify or enforce correct nesting structure.
 Unintuitive output may appear when nesting violations occur.
 }
 }
+\section{Script #16 (Procedures)}{
+\preformatted{
+<proc "random patients">
+  select patient_number
+    from patient_details
+    order by rand()
+    limit <R> N </R>
+  <result -> a>
+    a[, 1L]
+</proc>
+
+select days_in_hospital
+from patient_history
+where patient_number in
+  (<R> sqrl("random patients", N = 200) </R>)
+}
+\subsection{Commentary on Script #16}{
+It is possible to define reusable \acronym{SQRL} procedures within (between)
+\code{<proc>} and \code{</proc>} tags.
+Here, a (parameterised) procedure is employed as a nested-query alternative to
+the sequential feedback mechanism of script #10.
+
+Each procedure must be named (in its \code{<proc>} tag), with quotes (either
+single or double) being mandatory about that name.
+The end of a procedure definition acts in the same way as the end of a script
+(as an implied \code{<do>}).
+Note that \code{</proc>} tags are only recognised within \R sections, when (as
+is the case in this example) the \R section is within a procedure definition
+(i.e., under a \code{<proc>} tag).
+Opening \code{<proc>} tags are never recognised within \R sections.
+}
+}
+\section{Script #17 (Libraries)}{
+\preformatted{
+<proc "add na.strings">
+  -- Takes one argument, 'add' (a character vector),
+  -- and adds its strings to the na.strings parameter.
+  <R>
+    sqrl(na.strings = unique(c(sqrl("na.strings"), add)))
+  <do>
+</proc>
+
+<proc "drop if exists">
+  /* Takes one argument, 'tables', being a
+     character vector of tables to be dropped. */
+  -- Force as.is to be TRUE (for the query).
+  <R>
+    original <- sqrl("as.is")
+    sqrl(as.is = TRUE)
+  <do>
+  -- Pull details of temporary tables, then
+  -- restore the original value of as.is.
+  help volatile table
+  <result -> v>
+    sqrl(as.is = original)
+  <do>
+  -- Exit here when the above query did not return
+  -- a data frame (when no volatile table exists).
+  <if (class(v) != class(data.frame()))>
+    <return (invisible())>
+  </if>
+  -- Extract the names of all volatile tables
+  -- in existence, retain only those (unique)
+  -- tables to be dropped that actually exist,
+  -- and initialise the iterator.
+  <R>
+    volatiles <- as.character(v[, "Table SQL Name"])
+    tables <- unique(tables[tables \%in\% volatiles])
+    i <- 0L
+  <do>
+  -- Drop each requested table (that exists).
+  <while (i <- i + 1L; i <= length(tables))>
+    drop table <R> tables[i] </R> <do>
+  </while>
+  -- Return invisible NULL.
+  <return (invisible())>
+</proc>
+}
+\subsection{Commentary on Script #17}{
+The previous example, script #16, exhibited a procedure defined as a utility
+within a larger \acronym{SQRL} script.
+Such definitions are not persistent, with the procedures vanishing upon the
+conclusion of their parent script.
+
+However, as shown in \code{\link{sqrlUsage}}, it is possible to construct a
+persistent library of procedures.
+As is the case above, \acronym{SQRL} scripts intended for libraries must
+consist only of procedure definitions; no other \acronym{SQL} or \R is allowed.
+This example script defines two procedures (both parameterised).
+The first, \dQuote{add na.strings}, adds strings to the existing
+\var{na.strings} vector (refer to \code{\link{sqrlParams}}).
+The second, \dQuote{drop if exists}, implements that capability for Teradata
+\acronym{SQL} (which doesn't).
+
+Following \code{\link{sqrlUsage}}, let's say the above script is recorded in a
+file \file{library.sqrl}, and that we have a \pkg{SQRL} interface function
+called \code{owl}.
+The library is then established with \code{owl(library = "library.sqrl")}, and
+the procedures are called with (for instance)
+\code{owl("add na.strings", add = c("N/A", "-"))}, and
+\code{owl("drop if exists", tables = c("tableA", "tableB"))}.
+
+Ultimately, procedures do not confer any capability beyond that of
+\acronym{SQRL} files.
+Procedure libraries merely allow the consolidation of multiple files into one.
+They also offer another slight advantage in that when you change working
+directory, they come along.
+}
+}
+\section{Script #18 (Stop)}{
+\preformatted{
+select 1
+
+-- This ends the script.
+<stop>
+
+-- This is unreachable.
+select 2
+}
+\subsection{Commentary on Script #18}{
+Lastly, \code{<stop>} tags act as an early end-of-script (with its implied
+\code{<do>}).
+They apply within \R sections, as well as \acronym{SQL}, and even on the inside
+of a \code{FALSE} conditional block (i.e., the \code{<stop>} still functions in
+\code{<if (FALSE><R><stop>}).
+They are intended as a troubleshooting aid.
+}
+}
+\section{Summary of Tags}{
+\describe{
+\item{\code{<R>}:}{
+Begins an \R section (leaves \acronym{SQL}).
+Once begun, only \code{</R>}, \code{<do>}, \code{;}, \code{<stop>}, \code{EOS},
+and \code{</proc>} are recognised (and can end the section).
+The \code{</proc>} case is only recognised when the initiating \code{<R>} tag is
+within a procedure definition (beneath a \code{<proc>} tag).
+}
+\item{\code{</R>}:}{
+Ends an \R section, causing that section to be evaluated.
+The result of that evaluation is pasted back into the surrounding \acronym{SQL}.
+}
+\item{\code{<do>}:}{
+If inside an \R section, ends and evaluates that section (without pasting the
+result back into \acronym{SQL}).
+If outside of an \R section, causes the preceding \acronym{SQL} (which may be
+blank) to be submitted.
+}
+\item{\code{<result -> name>}:}{
+Submits the preceding \acronym{SQL}, and assigns the result of that submission
+to the \R variable \code{name}.
+Any syntactically valid \R name, or \dQuote{NULL}, is allowed (in place of
+\code{name}).
+An \R section begins immediately after the tag.
+That section concludes with any of the tags listed (above) for \code{<R>},
+besides \code{</R>}.
+}
+\item{\code{<close>}:}{
+Closes the \acronym{ODBC} channel (connection) to the data source.
+}
+\item{\code{<return (Rexp)>}:}{
+Evaluates \code{Rexp}, which can be any \R expression, and returns the resulting
+value (exits the script).
+The parentheses are mandatory.
+}
+\item{\code{<if (Rexp)>}:}{
+Evaluates \code{Rexp}, which can be any \R expression.
+If that expression evaluated to \code{TRUE}, the (arbitrary) script beneath the
+tag is acted upon.
+If that expression evaluated to \code{FALSE}, the (arbitrary) script beneath the
+tag is ignored (except for any \code{<stop>} tags).
+The parentheses are mandatory.
+}
+\item{\code{<else if (Rexp)>}:}{
+Acts as \code{<if (Rexp)>}, when the (mandatory) previous \code{<if ((Rexp)>},
+and all the (multiple, optional) previous \code{<else if (Rexp)>} tags,
+evaluated to \code{FALSE}.
+Otherwise (when any of those evaluated to \code{TRUE}), acts as
+\code{<if (FALSE)>}.
+The parentheses are mandatory.
+}
+\item{\code{<else>}:}{
+Acts as \code{<else if (TRUE)>}.
+}
+\item{\code{</if>}:}{
+Marks the end of an \code{<if (Rexp)>} - \code{<else if (Rexp)>} - \code{<else>}
+flow-control structure.
+}
+\item{\code{<while (Rexp)>}:}{
+Acts in the manner of \code{<if (Rexp)>}.
+The parentheses are mandatory.
+}
+\item{\code{</while>}:}{
+Marks the end of a \code{<while (Rexp)>} flow-control loop.
+If the previous \code{<while (Rexp)>} evaluated to \code{TRUE}, the parser
+returns to that \code{<while (Rexp)>} tag, and re-evaluates the \R expression.
+Otherwise (if the previous \code{<while (Rexp)>} evaluated to \code{FALSE}), no
+action is performed (the parser continues from this point).
+}
+\item{\code{<proc "name">}:}{
+Marks the beginning of the definition of a procedure called \var{name}.
+Any character string can be used in place of \var{name}.
+The quotation marks are mandatory (but can be singles or doubles).
+}
+\item{\code{</proc>}:}{
+Marks the end of a procedure definition (acts as an \var{EOS} for that
+procedure).
+}
+\item{\code{<stop>}:}{
+Acts as \var{EOS}.
+Applies even from within a \code{FALSE} conditional block.
+Intended for debugging, only.
+}
+\item{\code{;}:}{
+When the \var{scdo} parameter is at its default value of \code{TRUE} (see
+\code{\link{sqrlParams}}), the \acronym{SQRL} parser attempts to identify
+\acronym{SQL} statement terminating semicolons, procedural language block
+terminating semicolons, and any extra semicolons within \R sections.
+When detected, these all act as \code{<do>}.
+}
+\item{\var{EOS}:}{
+The end of the script (\var{EOS}), acts as \code{<do>}.
+As necessary, it also acts as \code{</if>} and \code{</proc>} (it does not act
+as \code{</while>}).
+}
+}
+}
 \note{
-The \var{verbose} parameter toggles extended (intermediate) output when running
-scripts (see \code{\link{sqrlParams}}).
+The \var{verbose} parameter toggles extended output when running scripts (see
+\code{\link{sqrlParams}}).
+This includes the display of intermediate values.
 }
 \seealso{
 \code{\link{sqrlUsage}}
-}
-\examples{
-# Define a new data source.
-sqrlSource("mire", "dsn=Mire")
-
-\dontrun{
-# Submit a SQL script to the source.
-mire("my/script.sql")
-
-# Submit a SQRL script, with explicit parameter values.
-mire("my/parameterised/script.sqrl",
-      day = Sys.Date(), colour = "'blue'")
-}
 }
 \keyword{file}

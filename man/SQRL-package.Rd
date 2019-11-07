@@ -3,22 +3,32 @@
 \alias{SQRL}
 \docType{package}
 \title{
-Database Query Interfaces
+Enhanced Database Interactivity
 }
 \description{
-Facilitates exploratory work and rapid prototyping with Open Database
-Connectivity (\acronym{ODBC}) data sources.
+Streamlines exploratory and development work and on (\acronym{ODBC}) data
+sources.
 }
 \details{
-Automatically creates like-named interface functions to \acronym{ODBC} data
-source names (\acronym{DSN}s).
-These functions support multi-statement \acronym{SQL} scripts, with or without
-arguments, embedded \R expressions, or flow-control structures.
+Automatically generates a dedicated and like-named interface function to each
+\acronym{ODBC} \acronym{DSN} (Open DataBase Connectivity Data Source Name).
+These functions manage communications behind the scenes, whilst supporting
+multi-statement \acronym{SQL} scripts, with or without embedded \R.
+Hybrid (\acronym{SQRL}) scripting syntax enables parameterisation of queries,
+the addition of flow-control structures in and around \acronym{SQL}, and
+the use of libraries of stored scripts.
 
-Additional interfaces can be defined at any time.
-Set-and-forget communication parameters are managed behind the scenes.
+Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-This is version 0.6.3.
+
+This is version 0.7.0.
+It adds support for procedural language blocks (\acronym{PL/SQL},
+\acronym{SQL PL}, etc.), and the ability to store and call parameterised
+\acronym{SQRL} procedures (functions).
+The default behaviour for pasting vectors and lists into \acronym{SQL} has
+changed, with vectors now being comma-collapsed (see \code{\link{sqrlParams}}).
+Whilst I apologise for that abrupt change, the new defaults are more versatile,
+and usually more convenient.
 }
 \author{
 Mike Lee
@@ -34,30 +44,30 @@ require(SQRL)
 sqrlSources()
 
 \dontrun{
-# If ratatoskr were one of those sources
-# (i.e., if a DSN of that name was found),
-# then a query could be submitted like so:
-ratatoskr("select messages from vedfolnir ",
-          "where addressee = 'nidhogg' ",
+# If 'ratatoskr' were one of those sources (i.e.,
+# if a DSN of that name was found), then a multi-
+# statement query could be submitted like so:
+ratatoskr("use yggdrasil; select messages from ",
+          "vedfolnir where addressee = 'nidhogg' ",
           "limit ", 5)
-}
-
-# Define a new data source.
-sqrlSource("mysource",
-            driver = "MYSQL ODBC 5.3 ANSI Driver",
-            server = "localhost",
-            user = "<uid>",
-            password = "<pwd>")
-
-\dontrun{
-# Obtain help on usage.
-mysource("help")
-
-# Submit a query to the new source.
-mysource("select * from database.table")
 
 # Submit a parameterised query from file.
-mysource("transactions.sqrl", customerid = 111111)
+ratatoskr("messages.sqrl", year = 950)
+
+# Obtain help on usage.
+ratatoskr("help")
+}
+
+# Define a new data source (interface).
+sqrlSource("mysource",
+           driver = "MYSQL ODBC 5.3 ANSI Driver",
+           server = "localhost",
+           user = "<uid>",
+           password = "<pwd>")
+
+\dontrun{
+# Submit a query to the new source.
+mysource("select * from database.table")
 }
 }
 \keyword{database}
