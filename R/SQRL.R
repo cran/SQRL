@@ -5,25 +5,26 @@
 # immediate interaction with each data source, since channels and communication
 # parameters are managed behind the scenes. The general philosophy is to require
 # the least possible typing from the user, while allowing the greatest possible
-# flexibility in how commands are entered. The approach emphasises the source
+# flexibility in how commands are entered. This approach emphasises the source
 # and query over concatenation functions and control parameters. The interfaces
 # accept multi-statement SQL scripts, allowing the use of scripts developed in
-# other applications without modification or multiple function calls. The script
-# parser supports query parameterisation via embedded R expressions, conditional
-# submission, loops, the feedback of intermediate results, and early returns.
-# Secondary features include the protection of connection handles from rm(), the
-# recovery of lost connections, the promotion of remote ODBC exceptions to local
-# R errors, optional automatic closure of connections between queries, and the
-# visual indication of which connections are open and of queries in progress.
-# Mike Lee, South Titirangi, 30 January 2019.
+# other applications without modification or fragmentation. The script parser
+# supports query parameterisation via embedded R expressions, the feedback of
+# intermediate results, reusable procedures, conditional submission, loops, and
+# early returns. Secondary features include the protection of connection handles
+# from rm(), automatic recovery from lost connections, the promotion of remote
+# ODBC exceptions to local R errors, optional automatic closure of connections
+# between queries, and visual indication of which connections are open and of
+# where and whether queries or fetches are in progress.
+# Mike Lee, South Titirangi, 7 March 2020.
 
 
 
 #################################################################### HISTORY ###
 
-# 2019-11. 0.7.0. Procedures in scripts.
-# 2019-01. 0.6.0. Flow-control in scripts. R-3.3.
-# 2018-03. 0.2.0. Explicit script arguments (kwargs).
+# 2019-11. 0.7.0. Procedures in SQRL scripts.
+# 2019-01. 0.6.0. Flow-control in SQRL scripts. R-3.3.
+# 2018-03. 0.2.0. Explicit SQRL script arguments (kwargs).
 # 2017-11. 0.1.0. Published. R-3.2.
 # 2014-04. Unpublished package. Script support.
 # 2014-01. Unpackaged prototype. R-2.
@@ -290,7 +291,7 @@ SqrlConfig <- function(datasource = "",
 
   # If no config was specified, return the data source's configuration as a list
   # of named SQRL/RODBC parameter values (with any secrets obliterated).
-  if ((base::class(config) == base::class(base::character()))
+  if (base::identical(base::class(config), base::class(base::character()))
       && (base::nchar(config) < 1L))
   {
     params <- SqrlParams("all")
@@ -303,7 +304,7 @@ SqrlConfig <- function(datasource = "",
   }
 
   # If a list of named elements was supplied, extract parameter values from it.
-  if ((base::class(config) == base::class(base::list()))
+  if (base::identical(base::class(config), base::class(base::list()))
       && !base::is.null(base::names(config))
       && base::all(base::grepl("[[:graph:]]", base::names(config))))
   {
@@ -513,13 +514,14 @@ SqrlDefile <- function(parameter = "",
   # besides these, return it unmodified. The reason for returning both blank and
   # empty character vectors here (before evaluation) is to take them as literal
   # values (rather than as R expressions; they would evaluate to NULL).
-  if (!(((base::class(value) == base::class(base::character()))
+  if (!((base::identical(base::class(value), base::class(base::character()))
           && (base::length(value) > 0L)
           && base::any(base::nzchar(base::trimws(value))))
-        || ((base::class(value) == base::class(base::list()))
+        || (base::identical(base::class(value), base::class(base::list()))
             && (base::length(value) > 0L)
-            && base::all(base::rapply(value, base::class)
-                          == base::class(base::character()))
+            && base::rapply(base::rapply(value, base::class, how = "list"),
+                            base::identical, classes = "ANY", deflt = NULL,
+                            how = "unlist", base::class(base::character()))
             && base::any(base::nzchar(base::rapply(value, base::trimws))))))
   {
     base::return(value)
@@ -539,15 +541,23 @@ SqrlDefile <- function(parameter = "",
       base::return(value)
     }
 
-    # Otherwise, if the value doesn't evaluate, or if it evaluates to something
-    # odd (for example, 'ls' evaluates to a function), return it unmodified.
+    # Otherwise, if the value doesn't evaluate, return it unmodified.
     evaluated <- base::try(base::eval(base::parse(text = value),
                                       base::new.env(parent = base::baseenv())),
                             silent = TRUE)
-    if (base::inherits(evaluated, "try-error")
-        || !(base::class(evaluated) %in% base::c(base::class(NULL),
-                  base::class(base::logical()), base::class(base::character()),
-                  base::class(base::numeric()), base::class(base::integer()))))
+    if (base::inherits(evaluated, "try-error"))
+    {
+      base::return(value)
+    }
+
+    # If the value evaluated to something odd (for example, 'ls' evaluates to a
+    # function), return it unmodified.
+    eclass <- base::class(evaluated)
+    if (!(base::identical(eclass, base::class(NULL))
+          || base::identical(eclass, base::class(base::logical()))
+          || base::identical(eclass, base::class(base::character()))
+          || base::identical(eclass, base::class(base::numeric()))
+          || base::identical(eclass, base::class(base::integer()))))
     {
       base::return(value)
     }
@@ -689,7 +699,8 @@ SqrlDelegate <- function(datasource = "",
     # where that would place a named argument before an unnamed argument.
     j <- base::length(i)
     while ((j > 0L)
-            && (base::class(args.list[[i[j]]]) == base::class(base::list()))
+            && base::identical(base::class(args.list[[i[j]]]),
+                                base::class(base::list()))
             && (base::length(args.list[[i[j]]]) > 0L)
             && !base::is.null(base::names(args.list[[i[j]]]))
             && !base::any(base::is.na(base::names(args.list[[i[j]]])))
@@ -1534,7 +1545,7 @@ SqrlFile <- function(datasource = "",
     # each of its members into the processing environment (rather than assigning
     # the whole list, 'args', as a single object).
     if ((base::names(params)[i] == "args")
-        && (base::class(params[[i]]) == base::class(base::list()))
+        && base::identical(base::class(params[[i]]), base::class(base::list()))
         && (base::length(params[[i]]) > 0L)
         && (!base::is.null(base::names(params[[i]])))
         && (base::all(base::names(params[[i]]) ==
@@ -2860,7 +2871,8 @@ SqrlFile <- function(datasource = "",
               if (!printed)
               {
                 base::cat(base::paste0("(object of class '",
-                                        base::class(result$value), "')\n"))
+                        base::paste0(base::class(result$value), collapse = " "),
+                        "')\n"))
               }
               base::cat("\n")
             }
@@ -2987,7 +2999,7 @@ SqrlHelp <- function(datasource = "",
   # tools Calls:
   #   Rd2HTML(), Rd2txt() (only if the tools package is installed).
   # utils Calls:
-  #   browseURL(), help(), installed.packages() (only if utils is attached).
+  #   browseURL(), help() (only if utils is attached).
   # User:
   #   Has no direct access, but is able to submit (only) the 'type' argument.
   #   That is coerced to an allowed value, and no further checks are required.
@@ -3024,7 +3036,7 @@ SqrlHelp <- function(datasource = "",
 
   # If the tools package (which converts Rd files) is unavailable, display the
   # pre-built (static) interface-usage help page, and return.
-  if (!("tools" %in% base::rownames(utils::installed.packages())))
+  if (base::length(base::find.package("tools", quiet = TRUE)) == 0L)
   {
     base::return(utils::help("sqrlUsage", help_type = type))
   }
@@ -3265,7 +3277,7 @@ SqrlHelper <- function(value = "")
   # Deparse and escape the entire configuration parameter-value list.
   # Any RODBC channel is reduced to its integer label.
   # Any library is truncated to its first element (plus an ellipsis).
-  if (base::class(value) == base::class(base::list()))
+  if (base::identical(base::class(value), base::class(base::list())))
   {
     if (!base::is.null(value[["channel"]]))
     {
@@ -3497,7 +3509,8 @@ SqrlInterface <- function(datasource = "",
   # Abort on invalid interface (name). Allowed values are NULL or a character
   # string. The requested name may, or may not, be available and assignable.
   if (!base::is.null(interface)
-      && ((base::class(interface) != base::class(base::character()))
+      && (!base::identical(base::class(interface),
+                            base::class(base::character()))
           || (base::length(interface) != 1L)
           || !base::nzchar(base::trimws(interface))))
   {
@@ -3651,7 +3664,7 @@ SqrlIsOpen <- function(datasource = "",
 
   # Return FALSE when the channel is not an RODBC handle (in which case we may
   # have mistakenly thought the channel was open, since it was non-null valued).
-  if (base::class(channel) != "RODBC")
+  if (!base::identical(base::class(channel), "RODBC"))
   {
     SqrlClose(datasource)
     base::return(FALSE)
@@ -3828,7 +3841,7 @@ SqrlOpen <- function(datasource = "")
   # Halt and notify on failure to connect. Might just be an incorrect password,
   # but could also be a network or server outage, etc. Fatal error, regardless.
   if (base::inherits(channel, "try-error")
-      || (base::class(channel) != "RODBC"))
+      || !base::identical(base::class(channel), "RODBC"))
   {
     base::stop("Connection attempt failed.")
   }
@@ -4099,6 +4112,27 @@ SqrlParam <- function(datasource = "",
   # The set argument has been supplied; act as a setter (cache and return).
   # First, we coerce the raw value to the expected type for the parameter.
 
+  # In the special case where the connection parameter has been specified as a
+  # character vector of named and/or unnamed elements, we collapse that vector
+  # to a single (connection) string. Where present, the vector element names
+  # become the connection-parameter names within the string.
+  if ((parameter == "connection")
+      && base::identical(base::class(set), base::class(base::character()))
+      && (base::length(set) > 0L)
+      && !base::any(base::is.na(set)))
+  {
+    if (base::is.null(base::names(set))
+        || !base::any(base::nzchar(base::names(set))))
+    {
+      set <- base::paste0(set, collapse = ";")
+    } else
+    {
+      set <- base::paste0(base::names(set),
+                          base::c("", "=")[base::nzchar(base::names(set)) + 1L],
+                          set, collapse = ";")
+    }
+  }
+
   # Nullable-string parameters are string-types which accept a set value of NULL
   # as an alias for the empty string.
   if ((parameter %in% SqrlParams("nullable-string"))
@@ -4113,7 +4147,7 @@ SqrlParam <- function(datasource = "",
   if (parameter %in% SqrlParams("rodbc/null-type"))
   {
     if (!base::is.null(set)
-        && (base::class(set) != "RODBC"))
+        && !base::identical(base::class(set), "RODBC"))
     {
       base::stop("New parameter value is not a connection handle.")
     }
@@ -4589,7 +4623,6 @@ SqrlParams <- function(group = "")
                                       "driver",
                                       "dsn",
                                       "interpretDot",
-                                      "pwd",
                                       "readOnlyOptimize",
                                       "rows_at_time",
                                       "tabQuote",
@@ -4917,7 +4950,7 @@ SqrlPing <- function(datasource,
   # The error message should be a character vector. If we got something else,
   # take the connection to be closed (it probably is, but might not be).
   if (base::inherits(s, "try-error")
-      || (base::class(s) != base::class(base::character()))
+      || !base::identical(base::class(s), base::class(base::character()))
       || (base::length(s) == 0L))
   {
     base::return(FALSE)
@@ -5116,23 +5149,39 @@ SqrlSource <- function(def)
   #   sqrlSource().
   # User:
   #   Has no direct access. Can supply the argument via sqrlSource() (only).
-  #   That function guarantees the existence of either at least two unnamed
-  #   terms, or at least one named term. Additional checks (assignability,
-  #   conflict, etc.) are performed here.
+  #   That function guarantees the existence of at least either two terms or
+  #   one named term. Additional checks (assignability, conflict, etc.) are
+  #   performed here.
 
-  # Separate the name from the definition component(s).
+  # Separate the name from the definition component(s). When there is only one
+  # term, we use it's name. When there is more than one term, we use the first
+  # term as the name if that term is not itself named. If it is named, we look
+  # instead for a unique term named 'name', and use that if it exists.
   if (base::length(def) == 1L)
   {
     name <- base::trimws(base::names(def))
     base::names(def) <- NULL
-  } else
+  } else if (base::is.null(base::names(def))
+              || !base::nzchar(base::names(def)[1L]))
   {
     name <- base::trimws(def[[1L]])
     def[[1L]] <- NULL
+  } else if ("name" %in% base::names(def))
+  {
+    i <- base::which(base::names(def) == "name")
+    if (base::length(i) > 1L)
+    {
+      base::stop("Multiple 'name' terms.")
+    }
+    name <- base::trimws(def[[i]])
+    def[[i]] <- NULL
+  } else
+  {
+    base::stop("Could not identify the intended source name.")
   }
 
   # Ensure either all terms are named, or that no term is named. When the terms
-  # are are named, ensure all names are different (unique).
+  # are named, ensure all names are different (unique).
   if (!base::is.null(base::names(def)))
   {
     isnamed <- base::nzchar(base::names(def))
@@ -5232,11 +5281,13 @@ SqrlSource <- function(def)
   }
 
   # Abort if a configuration file has been specified, but that file cannot be
-  # read (including file does not exist).
+  # read (including file does not exist). We will miss this here when the file
+  # path has been specified in a list, but SqrlConfig() will pick that up later.
   if (("config" %in% base::names(def))
+      && !base::identical(base::class(def["config"]), base::class(base::list()))
       && base::is.null(SqrlPath(def["config"])))
   {
-    base::stop("Cannot read config file.")
+    base::stop("Cannot read the config file.")
   }
 
   # When the defining terms do not include a 'copy', 'config', or 'connection',
@@ -5299,10 +5350,13 @@ SqrlSource <- function(def)
 
   # If we have a 'config' term, attempt to configure the source from the config
   # file. Values in the file override any vales that may already have been
-  # copied from another source. The incomplete source is deleted on error.
+  # copied from another source. The incomplete source is deleted on error. Note
+  # that def$config might be a file path (potentially in component form), or a
+  # list of (named) parameter = value pairs. SqrlConfig() will identify which
+  # (or neither) is the case, and handle appropriately.
   if ("config" %in% base::names(def))
   {
-    result <- base::try(SqrlConfig(name, SqrlPath(def$config)), silent = TRUE)
+    result <- base::try(SqrlConfig(name, def$config), silent = TRUE)
     if (base::inherits(result, "try-error"))
     {
       SqrlCache(name, delete = TRUE)
@@ -5354,8 +5408,8 @@ SqrlSource <- function(def)
     }
   }
 
-  # Return the interface name (not the source name), invisibly.
-  base::return(base::invisible(SqrlParam(name, "interface")))
+  # Return the source's configuration, invisibly.
+  base::return(base::invisible(SqrlConfig(name)))
 }
 
 SqrlSources <- function(import = "")
@@ -5551,8 +5605,8 @@ SqrlSubmit <- function(datasource,
     # long as this is not already a second attempt), or throw the exception (if
     # the 'errors' parameter is TRUE).
     if (base::inherits(result, "try-error")
-        || (base::class(result) == base::class(base::integer()))
-        || ((base::class(result) == base::class(base::character()))
+        || base::identical(base::class(result), base::class(base::integer()))
+        || (base::identical(base::class(result), base::class(base::character()))
               && (base::length(result) > 1L)))
     {
       # If the failure appears to have been caused by a lost connection, and
@@ -5606,8 +5660,8 @@ SqrlSubmit <- function(datasource,
   # RODBC), or an integer (either -1, failure, or -2, no data). Refer to the
   # RODBC manual. First, we look for any kind of error value.
   if (base::inherits(result, "try-error")
-      || (base::class(result) == base::class(base::integer()))
-      || ((base::class(result) == base::class(base::character()))
+      || base::identical(base::class(result), base::class(base::integer()))
+      || (base::identical(base::class(result), base::class(base::character()))
           && (base::length(result) > 1L)))
   {
     # If the failure appears to have been caused by a lost connection, and this
@@ -5628,7 +5682,7 @@ SqrlSubmit <- function(datasource,
 
   # When the result is not a data frame, there won't be any more rows to fetch.
   # This could be a character string or integer error code.
-  if (base::class(result) != base::class(base::data.frame()))
+  if (!base::identical(base::class(result), base::class(base::data.frame())))
   {
     base::return(result)
   }
@@ -5650,7 +5704,8 @@ SqrlSubmit <- function(datasource,
     {
       for (i in base::seq_along(result))
       {
-        if (base::class(result[, i]) == base::class(base::character()))
+        if (base::identical(base::class(result[, i]),
+                            base::class(base::character())))
         {
           result[, i] <- base::as.factor(result[, i])
         }
@@ -5684,7 +5739,7 @@ SqrlSubmit <- function(datasource,
   # frame (above), RODBC::sqlGetResults() should also have returned a data frame
   # (although, possibly one with zero rows). Anything else is an error.
   if (base::inherits(restof, "try-error")
-      || (base::class(restof) != base::class(base::data.frame())))
+      || !base::identical(base::class(restof), base::class(base::data.frame())))
   {
     # If the failure appears to have been caused by a lost connection, and this
     # is our first attempt, then make one more.
@@ -5716,7 +5771,8 @@ SqrlSubmit <- function(datasource,
   {
     for (i in base::seq_along(result))
     {
-      if (base::class(result[, i]) == base::class(base::character()))
+      if (base::identical(base::class(result[, i]),
+                          base::class(base::character())))
       {
         result[, i] <- base::as.factor(result[, i])
       }
@@ -5818,7 +5874,8 @@ SqrlSubScript <- function(datasource = "",
         } else
         {
           base::cat(base::paste0("(object of class '",
-                                  base::class(result), "')\n"))
+                            base::paste0(base::class(result), collapse = " "),
+                            "')\n"))
         }
         base::cat("\n")
       }
@@ -6073,7 +6130,8 @@ sqrlAll <- function(...)
   arglist <- base::list(...)
   if ((base::length(arglist) == 1L)
       && base::is.null(base::names(arglist))
-      && (base::class(arglist[[1L]]) == base::class(base::character()))
+      && base::identical(base::class(arglist[[1L]]),
+                          base::class(base::character()))
       && (base::nchar(arglist[[1L]]) > 0L)
       && ((arglist[[1L]] %in% base::c(SqrlParams("all"), "source"))
           || base::grepl("^is\\s*open$", arglist[[1L]])))
@@ -6133,7 +6191,7 @@ sqrlInterface <- function(...)
   }
 
   # Abort on non-existence of the specified data source.
-  if ((base::class(datasource) != base::class(base::character()))
+  if (!base::identical(base::class(datasource), base::class(base::character()))
       || (base::length(datasource) != 1L)
       || (base::nchar(datasource) < 1L)
       || SqrlCache(datasource, exists = FALSE))
@@ -6183,9 +6241,29 @@ sqrlSource <- function(...)
   #   of name and definition terms (in the form of multiple arguments, or at
   #   least one named argument). Additional checks are left to SqrlSource().
 
-  # Abort unless we have at least a pair of terms (name, definition) or a
-  # single named term (name = definition).
+  # Unpack any list arguments (to their first-level elements).
   def <- base::list(...)
+  i <- base::length(def)
+  while (i > 0L)
+  {
+    if (base::identical(base::class(def[[i]]), base::class(base::list())))
+    {
+      j <- base::seq_along(def)
+      if ((i == 1L)
+          && !base::is.null(base::names(def))
+          && base::nzchar(base::names(def)[1L]))
+      {
+        def <- base::c(base::names(def)[1L], def[[1L]], def[j[j > 1L]])
+      } else
+      {
+        def <- base::c(def[j[j < i]], def[[i]], def[j[j > i]])
+      }
+    }
+    i <- i - 1L
+  }
+
+  # Abort unless we have at least a pair of terms (name, definition) or a single
+  # named term (name = definition).
   if ((base::length(def) < 2L)
       && base::is.null(base::names(def)))
   {

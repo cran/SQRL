@@ -6,7 +6,7 @@
 Enhanced Database Interactivity
 }
 \description{
-Streamlines exploratory and development work and on (\acronym{ODBC}) data
+Streamlines exploratory work and short-order ad hoc jobs on \acronym{ODBC} data
 sources.
 }
 \details{
@@ -15,20 +15,12 @@ Automatically generates a dedicated and like-named interface function to each
 These functions manage communications behind the scenes, whilst supporting
 multi-statement \acronym{SQL} scripts, with or without embedded \R.
 Hybrid (\acronym{SQRL}) scripting syntax enables parameterisation of queries,
-the addition of flow-control structures in and around \acronym{SQL}, and
+the addition of flow-control structures within and around \acronym{SQL}, and
 the use of libraries of stored scripts.
 
 Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-
-This is version 0.7.0.
-It adds support for procedural language blocks (\acronym{PL/SQL},
-\acronym{SQL PL}, etc.), and the ability to store and call parameterised
-\acronym{SQRL} procedures (functions).
-The default behaviour for pasting vectors and lists into \acronym{SQL} has
-changed, with vectors now being comma-collapsed (see \code{\link{sqrlParams}}).
-Whilst I apologise for that abrupt change, the new defaults are more versatile,
-and usually more convenient.
+This is version 0.7.1.
 }
 \author{
 Mike Lee

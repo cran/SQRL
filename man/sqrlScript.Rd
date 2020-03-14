@@ -693,7 +693,7 @@ Lastly, \code{<stop>} tags act as an early end-of-script (with its implied
 \code{<do>}).
 They apply within \R sections, as well as \acronym{SQL}, and even on the inside
 of a \code{FALSE} conditional block (i.e., the \code{<stop>} still functions in
-\code{<if (FALSE><R><stop>}).
+\code{<if (FALSE)><R><stop>}).
 They are intended as a troubleshooting aid.
 }
 }

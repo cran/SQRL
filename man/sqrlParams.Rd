@@ -21,7 +21,7 @@ When an atomic object (typically a vector of character or integer type) is
 pasted into \acronym{SQL}, that object is first collapsed to a single string,
 with \var{aCollapse} separating each sequential pair of the object's elements.
 The default value is comma (\dQuote{,}).
-Earlier versions of \pkg{SQRL} used newline (\dQuote{\\n}).
+Early versions of \pkg{SQRL} used newline (\dQuote{\\n}).
 }
 \item{\var{as.is}:}{
 A logical vector, or a numeric vector (of column indices), or a  character
@@ -97,6 +97,9 @@ Overrides \var{dsn}, should both be defined.
 Locked while the connection is open.
 Defaults to the empty string (connect via \acronym{DSN} instead).
 Will accept \code{NULL} as an alias for the empty string.
+Can be specified as a character vector of named (and/or unnamed) components,
+from which a single string will be constructed (see the examples in
+\code{\link{sqrlSource}}).
 Setting \var{connection} resets \var{dsn}, unless \var{connection} contains the
 \dQuote{<dsn>} placeholder (see \code{\link{sqrlSource}}).
 }
@@ -167,7 +170,7 @@ that object is first collapsed to a single string, with \var{lCollapse}
 separating each sequential pair of the object's elements (to each of which,
 \var{aCollapse} will have first been applied).
 The default value is the empty string (\dQuote{}).
-Earlier versions of \pkg{SQRL} used comma (followed by a space; \dQuote{, }).
+Early versions of \pkg{SQRL} used a comma followed by a space (\dQuote{, }).
 }
 \item{\var{library}:}{
 A character vector.
@@ -234,8 +237,8 @@ Will accept \code{NULL} as an alias for the empty string.
 \item{\var{pwd}:}{
 A character string.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC::odbcConnect}}.
-Specifies the password for authentication.
-Locked while the connection is open.
+Specifies a password to use at the next authentication request.
+This need not match the password that was used to open the current channel.
 Defaults to the empty string (interpreted as do not supply a password to the
 \acronym{ODBC} driver).
 Will accept \code{NULL} as an alias for the empty string.
