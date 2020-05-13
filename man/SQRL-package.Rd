@@ -1,6 +1,7 @@
 \name{SQRL-package}
 \alias{SQRL-package}
 \alias{SQRL}
+\alias{sqrl}
 \docType{package}
 \title{
 Enhanced Database Interactivity
@@ -13,14 +14,18 @@ sources.
 Automatically generates a dedicated and like-named interface function to each
 \acronym{ODBC} \acronym{DSN} (Open DataBase Connectivity Data Source Name).
 These functions manage communications behind the scenes, whilst supporting
-multi-statement \acronym{SQL} scripts, with or without embedded \R.
-Hybrid (\acronym{SQRL}) scripting syntax enables parameterisation of queries,
-the addition of flow-control structures within and around \acronym{SQL}, and
-the use of libraries of stored scripts.
+multi-statement \acronym{SQL} scripts.
+Hybrid (\acronym{SQRL}) scripting syntax allows \acronym{SQL} with embedded \R,
+thereby enabling parameterisation of queries, feedback of intermediate results,
+the addition of flow-control structures within and around \acronym{SQL}, and the
+use of libraries of stored scripts.
 
 Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-This is version 0.7.1.
+This is version 0.7.2.
+This is a very minor update.
+The main change is to how the default value of \var{stringsAsFactors} is defined
+on \R-4.
 }
 \author{
 Mike Lee

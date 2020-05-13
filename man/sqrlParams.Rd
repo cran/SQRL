@@ -281,9 +281,13 @@ by \acronym{SQRL} tags, especially the \code{<do>} tag (see
 \item{\var{stringsAsFactors}:}{
 A logical singleton.
 Argument to \code{\link[RODBC:sqlQuery]{RODBC::sqlQuery}}.
-Controls the conversion of character to factor columns within query results,
-excluding those columns covered by \var{as.is}.
-Defaults to \code{default.stringsAsFactors()}.
+Controls the conversion of character columns to factor columns within query
+results, excluding those columns covered by \var{as.is}.
+In \R-3, the default value is \code{default.stringsAsFactors()}.
+In \R-4, the default value is \code{FALSE}.
+For simplicity and consistency, it is possible the default value for \R-3 will
+some day change to \code{FALSE}.
+This would differ from the \pkg{RODBC} default on \R-3.
 }
 \item{\var{tabQuote}:}{
 A character vector of length 0, 1, or 2, or \code{NULL}.

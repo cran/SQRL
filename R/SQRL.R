@@ -460,7 +460,8 @@ SqrlDefault <- function(datasource = "",
     "nullstring"          = NA_character_,
     "na.strings"          = "NA",
     "dec"                 = base::as.character(base::getOption("dec")),
-    "stringsAsFactors"    = base::default.stringsAsFactors(),
+    "stringsAsFactors"    = base::ifelse(base::R.Version()[["major"]] < "4",
+                                      base::default.stringsAsFactors(), FALSE),
     # default.stringsAsFactors() throws an error if options() has been used to
     # set stringsAsFactors to a value that is neither TRUE nor FALSE.
 
