@@ -68,6 +68,14 @@ File paths should not be wrapped in quotes.
 Other strings may be wrapped, although this is not mandatory unless they clash
 with the name of an object within the \R base namespace.
 
+\emph{
+This format is likely to change within the next version or two.
+Specifically, the \R-like rules used between \code{<with>} tags will then apply
+(see example #05 of \code{\link{sqrlScript}}).
+This will make configuration files parsable by \R, but will require quotes
+around all character strings, file paths included.
+}
+
 No action is taken when the right hand side of the equals is blank (as for the
 \var{dsn} parameter, above).
 That is, no assignment is made to the parameter on the left hand side.

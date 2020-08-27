@@ -19,13 +19,12 @@ Hybrid (\acronym{SQRL}) scripting syntax allows \acronym{SQL} with embedded \R,
 thereby enabling parameterisation of queries, feedback of intermediate results,
 the addition of flow-control structures within and around \acronym{SQL}, and the
 use of libraries of stored scripts.
-
 Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-This is version 0.7.2.
-This is a very minor update.
-The main change is to how the default value of \var{stringsAsFactors} is defined
-on \R-4.
+
+This is version 0.7.3.
+It adds a cleaner mechanism for defining communications settings from within
+scripts (see example #05 of \code{\link{sqrlScript}}).
 }
 \author{
 Mike Lee

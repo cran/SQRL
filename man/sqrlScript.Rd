@@ -73,7 +73,69 @@ This mechanism cannot be used to insert additional tags into the \acronym{SQRL}
 script.
 }
 }
-\section{Script #04 (Procedural Language Blocks)}{
+\section{Script #04 (R, out of SQL)}{
+\preformatted{
+<R>
+  threshold <- 9000
+<do> -- This tag terminates the R section.
+
+<R>
+  if (!exists("date", inherits = FALSE))
+    date <- format(Sys.Date(), "\%Y-\%m-\%d");
+  date <- paste0("'", date, "'")
+; -- This semicolon terminates the R section.
+
+select * from database.table
+where event_date = <R> date </R>
+and event_size > <R> threshold </R>
+}
+\subsection{Commentary on Script #04}{
+As in scripts #02 and #03, when an \R section ends with \code{</R>}, the result
+of evaluating that section is pasted into the surrounding \acronym{SQL} (or
+implied \acronym{SQL}, if those surroundings are blank).
+However, an \R section can also be terminated by a \code{<do>} tag, or by a
+non-syntactical semicolon (that being one with nothing but whitespace between it
+and the previous semicolon, newline, or \code{<R>} tag).
+Such sections are evaluated in the same way as those ending in \code{</R>} tags,
+but the results are not pasted into \acronym{SQL}.
+These sections can only appear between, not within, \acronym{SQL} statements.
+
+In this script, the first out-of-\acronym{SQL} \R section is used to define a
+numerical constant.
+The second out-of-\acronym{SQL} \R section supplies a default value for a
+variable, \var{date}, if no value was explicitly passed in (see
+\code{\link{sqrlUsage}}).
+It then wraps the character representation of \var{date} in single quotes (to
+make it \acronym{SQL}-friendly).
+These two \R sections could be combined into one.
+}
+}
+\section{Script #05 (Temporary Parameter Settings)}{
+\preformatted{
+<with>
+  na.strings = c('NA', "-")   -- comment
+  x <- 5; max = x + 1         /* comment */
+  as.is = TRUE                 # comment
+</with>
+
+-- Run this query with the above settings.
+select * from database.table
+}
+\subsection{Commentary on Script #05}{
+Tags \code{<with>} and \code{</with>} delimit special-purpose blocks of \R.
+They are used to set temporary parameter values, which remain in effect only
+for the duration of the script.
+To be clear, temporary values survive beyond the \code{</with>} tag, but not
+beyond the end of the script.
+
+This mechanism only works for a limited number of parameters.
+At this time, they are: \var{aCollapse}, \var{as.is}, \var{buffsize},
+\var{dec}, \var{errors}, \var{lCollapse}, \var{max}, \var{na.strings},
+\var{nullstring}, \var{ping}, \var{pwd}, \var{scdo}, \var{stringsAsFactors},
+and \var{verbose}.
+}
+}
+\section{Script #06 (Procedural Language Blocks)}{
 \preformatted{
 select 1 from dual; -- This semicolon terminates the statement.
 
@@ -94,7 +156,7 @@ end; -- This semicolon terminates the block.
 
 select 2 as N from dual
 }
-\subsection{Commentary on Script #04}{
+\subsection{Commentary on Script #06}{
 As with statement-terminating semicolons (refer to script #01), the \pkg{SQRL}
 parser attempts to identify procedural-language block-terminating semicolons,
 and submits each such block as those semicolons are encountered.
@@ -111,86 +173,16 @@ is returned.
 In this case, that would be \code{data.frame(N = 2L)}.
 }
 }
-\section{Script #05 (R, out of SQL)}{
-\preformatted{
-<R>
-  if (!exists("date", inherits = FALSE))
-    date <- format(Sys.Date(), "\%Y-\%m-\%d");
-
-  date <- paste0("'", date, "'")
-
-; -- This semicolon terminates the R section.
-
-select * from database.table
-where event_date = <R> date </R>
-}
-\subsection{Commentary on Script #05}{
-As in scripts #02 and #03, when an \R section ends with \code{</R>}, the result
-of evaluating that section is pasted into the surrounding \acronym{SQL} (or
-implied \acronym{SQL}, if those surroundings are blank).
-However, an \R section can also be terminated by a non-syntactical semicolon;
-that being one with nothing but whitespace between it and the previous
-semicolon, newline, or \code{<R>} tag.
-Such sections are evaluated in the same way as those ending in \code{</R>} tags,
-but the results are not pasted into \acronym{SQL}.
-These sections can only appear between, not within, \acronym{SQL} statements.
-
-In this script, an out-of-\acronym{SQL} \R section is used to set a (default)
-value for a variable, \var{date}, if no value was explicitly passed in (see
-\code{\link{sqrlUsage}}).
-It then wraps the character representation of \var{date} in single quotes (to
-make it \acronym{SQL}-friendly).
-}
-}
-\section{Script #06 (The sqrl Function)}{
-\preformatted{
-<R>
-  stopifnot(sqrl("name") == "MySource")
-
-  sqrl(as.is = TRUE,
-       stringsAsFactors = FALSE,
-       visible = TRUE)
-;
-
-select * from database.table
-}
-\subsection{Commentary on Script #06}{
-The function \code{sqrl(...)} is a special interface that is automatically
-defined into the temporary script-evaluation (working) environment.
-It acts as a cut-down \code{\link{sqrlAll}}, relaying its
-arguments only to whichever \pkg{SQRL} data source is executing the script.
-It works even when the name of the invoking interface function changes, or
-when that interface function does not exist.
-Consequently, \code{sqrl} should be adopted in preference to hard-coding
-interface names into scripts.
-
-Here, the \code{sqrl} function is first used to provide an assert, which, in
-this case, verifies the script is being run only on the intended data source.
-After that, a second call of \code{sqrl(...)} is used to set three
-(\pkg{RODBC}/\pkg{SQRL}) parameters before any \acronym{SQL} is submitted.
-Due to \pkg{SQRL}'s set-and-forget approach, these changes are persistent
-(parameter values will remain in effect after execution of the script).
-The restoration of initial values is covered by example script #09.
-
-As shown in script #16, the \code{sqrl} function can also be used to make nested
-queries (its arguments could just as easily be another script).
-
-When a script is being run from some particular interface, explicit calls to
-that same interface function (as opposed to \code{sqrl}) are normally blocked.
-Calls to \code{\link{sqrlAll}}, \code{\link{sqrlInterface}},
-\code{\link{sqrlOff}}, \code{\link{sqrlSource}}, and \code{\link{sqrlSources}}
-are also normally blocked.
-If you really want a way around these blocks, calls can be made to
-\code{SQRL::sqrlAll}, instead of just \code{sqrlAll}, and so on.
-Alternatively, \code{<R> rm("sqrlAll") <do>} (et cetera) removes the block (this
-also works for unblocking the interface function).
-}
-}
 \section{Script #07 (Parser Control)}{
 \preformatted{
 -- Change parser to fallback mode.
+<with>
+  scdo = FALSE
+</with>
+
+-- An outside-of-SQL R section.
 <R>
-  sqrl(scdo = FALSE);
+  N <- 2;
 <do> -- This tag terminates the section.
 
 -- The default (scdo = TRUE) SQRL parser would
@@ -203,12 +195,12 @@ end /**/ ;
 select 1 from dual; -- Semicolon ignored.
 <do> -- This tag terminates the statement.
 
-select 2 from dual
+select <R> N </R> from dual
 }
 \subsection{Commentary on Script #07}{
-While the parser reliably detects terminal semicolons at the ends of
-\acronym{SQL} statements and \R sections, it remains unsophisticated, and
-ignorant of \acronym{DBMS}-specific procedural-language syntaxes.
+While the parser detects terminal semicolons at the ends of \acronym{SQL}
+statements and \R sections, it remains unsophisticated, and ignorant of
+\acronym{DBMS}-specific procedural-language syntaxes.
 That being the case, if you are working with procedural-language extensions to
 \acronym{SQL}, sooner or later the parser will fail to detect the end of a
 block.
@@ -245,6 +237,7 @@ where
 <result -> var>
 
   names(var)[names(var) == "calDate"] <- "Date"
+  var$Snowfall <- as.numeric(var$Snowfall)
   first <- as.Date(paste(year, 1, 1, sep = "-"))
   last <- as.Date(paste(year, 12, 31, sep = "-"))
   alldates <- data.frame(Date = seq(first, last, 1))
@@ -287,42 +280,7 @@ In \pkg{SQRL}, blank queries (blank \acronym{SQL} statements) are always
 allowed, and return no value.
 }
 }
-\section{Script #09 (Restoring Settings)}{
-\preformatted{
-<R>
-  -- Record initial parameter values.
-  initials <- sqrl("settings")
-
-  -- Alter values to suit this script.
-  sqrl(as.is = TRUE,
-       scdo = FALSE,
-       stringsAsFactors = FALSE,
-       verbose = TRUE)
-<do>
-
--- Submit this query, saving the result.
-select '01'
-<result -> out>
-<do>
-
-<R>
-  -- Restore initial parameter values.
-  sqrl(initials)
-
-  -- Return the result of the query.
-  out
-}
-\subsection{Commentary on Script #09}{
-Because changes to \pkg{SQRL}/\pkg{RODBC} parameter values are persistent (see
-script #06), it can be preferable to restore initial values at the end of a
-script that modifies any.
-Because only the result of the final operation is returned, it is necessary to
-save the output of the query before restoring initial parameter settings, so
-that the final operation can be a recall of that query output.
-The \command{settings} command is described in \code{\link{sqrlUsage}}.
-}
-}
-\section{Script #10 (Feedback of Intermediate Results)}{
+\section{Script #09 (Feedback of Intermediate Results)}{
 \preformatted{
 select distinct customer_number from our.customers
 where town in (<R> paste0("'", towns, "'") </R>)
@@ -332,7 +290,7 @@ where town in (<R> paste0("'", towns, "'") </R>)
 select sum(transactions) from online.orders
 where customer_number in (<R> z$customer_number </R>)
 }
-\subsection{Commentary on Script #10}{
+\subsection{Commentary on Script #09}{
 This script takes one parameter, \var{towns}, a character vector.
 By default, atomic vectors are pasted into \acronym{SQL} as comma-separated
 values.
@@ -350,11 +308,11 @@ parameter.
 Similarly, the pasting behaviour of list-like objects is controlled by the
 \var{lCollapse} parameter (which defaults to the empty string).
 To restore \pkg{SQRL}-0.6.3 pasting rules, insert
-\code{<R>sqrl(aCollapse = "\n", lCollapse = ", ")<do>} at the top of a script.
+\code{<with> aCollapse = "\n"; lCollapse = ", " </with>} at the top of a script.
 See \code{\link{sqrlUsage}} and \code{\link{sqrlParams}} for further detail.
 }
 }
-\section{Script #11 (Combining Data Sources)}{
+\section{Script #10 (Combining Data Sources)}{
 \preformatted{
 <R>
   n <- OtherSource("select distinct customer_number ",
@@ -365,8 +323,8 @@ See \code{\link{sqrlUsage}} and \code{\link{sqrlParams}} for further detail.
 select sum(transactions) from online.orders
 where customer_number in (<R> n$customer_number </R>)
 }
-\subsection{Commentary on Script #11}{
-This is a repeat of script #10, except now the tables of the first and second
+\subsection{Commentary on Script #10}{
+This is a repeat of script #09, except now the tables of the first and second
 queries are hosted on two entirely separate data sources.
 The function \code{OtherSource} is the \pkg{SQRL} interface to the data source
 of the first query, while this script should be run from the interface to the
@@ -375,6 +333,79 @@ Again, there are other ways to do this, but the general idea is for the main \R
 script (performing the modelling and analysis) to make a single call
 \dQuote{get me this data}, without clutter, or concern for the true horror of
 where that data comes from.
+}
+}
+\section{Script #11 (The sqrl Function)}{
+\preformatted{
+<R>
+  -- Check this is the intended source.
+  stopifnot(sqrl("name") == "MySource")
+
+  -- Remember initial parameter values.
+  initials <- sqrl("settings")
+
+  -- Set some parameter values.
+  sqrl(stringsAsFactors = FALSE,
+       wintitle = "[MySource]",
+       visible = TRUE)
+;
+
+-- Submit the query, record the result.
+select * from database.table
+<result -> out>;
+
+<R>
+  -- Restore initial parameter values.
+  sqrl(initials)
+
+  -- Return the query result.
+  out
+}
+\subsection{Commentary on Script #11}{
+The function \code{sqrl(...)} is a special interface that is automatically
+defined into the temporary script-evaluation (working) environment.
+It acts as a cut-down \code{\link{sqrlAll}}, relaying its
+arguments only to whichever \pkg{SQRL} data source is executing the script.
+It works even when the name of the invoking interface function changes, or
+when that interface function does not exist.
+Consequently, \code{sqrl} should be adopted in preference to hard-coding
+interface names into scripts.
+
+Here, the \code{sqrl} function is first used to provide an assert, which, in
+this case, verifies the script is being run only on the intended data source.
+A second call then takes a snapshot of the current \pkg{RODBC}/\pkg{SQRL}
+parameter settings (the \command{settings} command is described in
+\code{\link{sqrlUsage}}).
+A third call then sets new values for three of those parameters, prior to
+submission of the \acronym{SQL} query.
+
+Due to \pkg{SQRL}'s set-and-forget approach, these values are persistent, and
+(unless they are changed again) will remain in effect after execution of the
+script has completed.
+That being the case, another call of \code{sqrl} is made after the query, in
+order to restore the original parameter values.
+
+Note that (temporary) parameter values set via \code{<with> ... </with>} take
+precedence over (persistent) values set via \code{sqrl(...)}, irrespective of
+the order in which those settings are made within the script.
+Also, whilst (for example) \code{sqrl(max = 1)} sets the persistent value for
+parameter \var{max}, \code{sqrl("max")} returns the value currently in effect
+(which might be a temporary value).
+Hence, for purposes of setting script-specific parameter values, using
+\code{<with>} is, when possible, generally preferable to calling \code{sqrl}.
+
+As shown in script #16, the \code{sqrl} function can also be used to make nested
+queries (its arguments could just as easily be another script).
+
+When a script is being run from some particular interface, explicit calls to
+that same interface function (as opposed to \code{sqrl}) are normally blocked.
+Calls to \code{\link{sqrlAll}}, \code{\link{sqrlInterface}},
+\code{\link{sqrlOff}}, \code{\link{sqrlSource}}, and \code{\link{sqrlSources}}
+are also normally blocked.
+If you really want a way around these blocks, calls can be made to
+\code{SQRL::sqrlAll}, instead of just \code{sqrlAll}, and so on.
+Alternatively, \code{<R> rm("sqrlAll") <do>} (et cetera) removes the block (this
+also works for unblocking the interface function).
 }
 }
 \section{Script #12 (Closing Connections)}{
@@ -589,7 +620,7 @@ where patient_number in
 It is possible to define reusable \acronym{SQRL} procedures within (between)
 \code{<proc>} and \code{</proc>} tags.
 Here, a (parameterised) procedure is employed as a nested-query alternative to
-the sequential feedback mechanism of script #10.
+the sequential feedback mechanism of script #09.
 
 Each procedure must be named (in its \code{<proc>} tag), with quotes (either
 single or double) being mandatory about that name.
@@ -615,15 +646,12 @@ Opening \code{<proc>} tags are never recognised within \R sections.
   /* Takes one argument, 'tables', being a
      character vector of tables to be dropped. */
   -- Force as.is to be TRUE (for the query).
-  <R>
-    original <- sqrl("as.is")
-    sqrl(as.is = TRUE)
-  <do>
-  -- Pull details of temporary tables, then
-  -- restore the original value of as.is.
+  <with>
+    as.is = TRUE
+  </with>
+  -- Pull details of temporary tables.
   help volatile table
   <result -> v>
-    sqrl(as.is = original)
   <do>
   -- Exit here when the above query did not return
   -- a data frame (when no volatile table exists).
@@ -732,6 +760,18 @@ Closes the \acronym{ODBC} channel (connection) to the data source.
 Evaluates \code{Rexp}, which can be any \R expression, and returns the resulting
 value (exits the script).
 The parentheses are mandatory.
+}
+\item{\code{<with>}:}{
+Begins a special \R section, for assigning temporary values to \pkg{RODBC}/\pkg{SQRL} parameters.
+Once begun, only \code{</with>}, \code{<stop>}, \code{EOS}, and \code{</proc>}
+are recognised (and can end the section).
+The \code{</proc>} case is only recognised when the initiating \code{<with>} tag
+lies within a procedure definition (beneath a \code{<proc>} tag).
+}
+\item{\code{</with>}:}{
+Ends an \R section begun by \code{<with>}.
+Causes the section to be evaluated, and assigns temporary parameter values
+accordingly.
 }
 \item{\code{<if (Rexp)>}:}{
 Evaluates \code{Rexp}, which can be any \R expression.

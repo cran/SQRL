@@ -83,8 +83,9 @@ occurs).
 # the string could be replaced with the name of a DSN, the path of
 # a config file, or the name of an existing source (to be copied).
 # This particular connection string would be for a GNU/Linux system
-# upon which the unixODBC driver alias 'SQLite' has been defined.
-sqrlSource(A = "Driver=SQLite;Database=/home/mydb.db;Timeout=1000")
+# upon which the unixODBC driver alias 'MariaDB' has been defined,
+# in addition to the 'MDB' alias for the server address.
+sqrlSource(A = "Driver=MariaDB;Server=MDB;User=zarkov;Password=zenith")
 
 # Redefine source 'A', by a connection string given in sections.
 # This is for a GNU/Linux system without a unixODBC driver alias.
@@ -104,10 +105,11 @@ sqrlSource("jumbo",
 
 # Define another source, as a vector of connection string
 # components, along with some RODBC/SQRL parameter values.
-sqrlSource("mongo", readOnlyOptimize = TRUE, autoclose = TRUE,
-           connection = c(Driver = "{MariaDB ODBC 3.0 Driver}",
-                          Server = "mydatabase.mydomain.com",
-                          User = "zarkov"))
+sqrlSource("mydb", believeNRows = FALSE, autoclose = TRUE,
+           connection = c(Driver = "SQLite3 ODBC Driver",
+                          Database = "C:/mydatabase.db",
+                          Timeout = 10000,
+                          StepAPI = 1))
 
 # Define another source, from a DSN (rather than a connection
 # string), while also setting an RODBC/SQRL parameter value.
@@ -136,6 +138,12 @@ sqrlSource(list(name = "Huma",
 # Note the mixture of named and unnamed connection string components.
 sqrlSource(source = list(connection = c("DSN=Source", UID = "me"),
                          interface = "S"))
+
+# Another source, defined by a list of named connection string
+# components (without setting any other parameter values).
+sqrlSource(sf = list(driver = "{SnowflakeDSIIDriver}",
+                     server = "xyz.eu-central-1.snowflakecomputing.com",
+                     uid = "me", pwd = "guess", port = 443))
 
 # Create a configuration file.
 config.file <- tempfile()

@@ -8,9 +8,9 @@ This material does not describe a function, but (rather) the various parameters
 governing \acronym{ODBC} communications and package behaviour.
 The majority of these are passed through to \pkg{RODBC}.
 
-\pkg{SQRL} adopts a set-and-forget approach, wherein any changes to the values
-of these parameters are persistent, and all subsequent communications make use
-of those values.
+\pkg{SQRL} adopts a set-and-forget approach, wherein changes to the values of
+these parameters are persistent, and all subsequent communications make use of
+those values.
 Each registered (\pkg{SQRL}) data source has its own independent set of values.
 }
 \section{Parameters}{
@@ -35,6 +35,8 @@ Due to \pkg{SQRL}'s set-and-forget approach to parameters, it is inconvenient to
 change \var{as.is} on a query-by-query basis.
 That being the case, it is often best defined as a logical singleton (either
 \code{TRUE} or \code{FALSE}).
+Alternatively, temporary query-specific values can be set within \acronym{SQRL}
+scripts (see \code{\link{sqrlSource}}).
 Default value is \code{FALSE} (convert all character columns).
 }
 \item{\var{autoclose}:}{
