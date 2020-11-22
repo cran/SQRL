@@ -228,6 +228,7 @@ simple (reduced functionality) wrappers about
 \code{\link[RODBC:sqlTables]{RODBC::sqlTables}}, and
 \code{\link[RODBC:sqlColumns]{RODBC::sqlColumns}}, respectively.
 These features are dependent upon the support of your \acronym{DBMS}.
+For some sources, the \var{believeNRows} parameter may need to be \code{FALSE}.
 }
 \section{Reviewing Settings}{
 \preformatted{

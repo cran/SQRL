@@ -4,7 +4,7 @@
 \alias{sqrl}
 \docType{package}
 \title{
-Enhanced Database Interactivity
+Facilitates Database Interaction
 }
 \description{
 Streamlines exploratory work and short-order ad hoc jobs on \acronym{ODBC} data
@@ -21,10 +21,7 @@ the addition of flow-control structures within and around \acronym{SQL}, and the
 use of libraries of stored scripts.
 Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-
-This is version 0.7.3.
-It adds a cleaner mechanism for defining communications settings from within
-scripts (see example #05 of \code{\link{sqrlScript}}).
+This is version 0.7.4.
 }
 \author{
 Mike Lee

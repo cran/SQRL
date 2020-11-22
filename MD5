@@ -1,7 +1,7 @@
-217e614c8a34c74aa3f6a2392cc1f717 *DESCRIPTION
+da4e4265bc239aa3c6693d0a1d298bb5 *DESCRIPTION
 e7c776d6d6e61f9cfbbce76a353ddaf9 *NAMESPACE
-e376c6b3b406c8d1d68a3b9fcf10c134 *R/SQRL.R
-321db61d44b304aabe99845b2ae5a462 *man/SQRL-package.Rd
+1517883090eb8528c5e17ac0d15c34f7 *R/SQRL.R
+84dca13cf805ae4629e7aa5cf5480abf *man/SQRL-package.Rd
 2a3f252bd95440db03f0eec0cc8ce22a *man/sqrlAll.Rd
 1a36399a3bfbd3368e0fde381d153a8f *man/sqrlConfig.Rd
 0bd9de77fb0ef58a43e23bac2a1a6eb1 *man/sqrlInterface.Rd
@@ -10,4 +10,4 @@ e376c6b3b406c8d1d68a3b9fcf10c134 *R/SQRL.R
 dba9fe635264040c949a42e1189851fa *man/sqrlScript.Rd
 f5b094b2de32f7ad63b69b5bf160cbad *man/sqrlSource.Rd
 c0b41a43148afac30edc702538057532 *man/sqrlSources.Rd
-e3e6c9610334d19fdb6830be10d75ca9 *man/sqrlUsage.Rd
+6fb77f759fd650fc99782eeb5f045711 *man/sqrlUsage.Rd

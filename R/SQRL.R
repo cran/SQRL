@@ -31,7 +31,7 @@
 # SqrlConfig()        Private. Sets SQRL/RODBC parameters from a config file.
 # SqrlDefault()       Private. Defines and returns default parameter values.
 # SqrlDefile()        Private. Extracts parameter values from container files.
-# SqrlDelegate()      Private. Relays data between interfaces and functions.
+# SqrlDelegate()      Private. Delegates commands to appropriate functions.
 # SqrlDSNs()          Private. Registers existing DSN data sources with SQRL.
 # SqrlFace()          Private. Interfaces with the SQRL:Face environment.
 # SqrlFile()          Private. Sources SQL (and/or R) statements from a file.
@@ -48,11 +48,13 @@
 # SqrlPing()          Private. Sets and submits ping queries to data sources.
 # SqrlPL()            Private. Detects procedural (PL) blocks within scripts.
 # SqrlProc()          Private. Checks if a value names a stored procedure.
+# SqrlShell()         Private. Relays commands from interfaces to delegator.
 # SqrlStatement()     Private. Assembles SQL statements from listed components.
 # SqrlSource()        Private. Registers/defines new data sources with SQRL.
 # SqrlSources()       Private. Look for, and summarise, known data sources.
 # SqrlSubmit()        Private. Submits SQL, retrieves results, handles errors.
 # SqrlSubScript()     Private. Relays data between SqrlFile() and SqrlSubmit().
+# SqrlTry()           Private. Silent error catching, with warning suppression.
 # SqrlValue()         Private. Wrapper to SqrlParam(). Keeps secrets secret.
 
 # sqrlAll()           Public.  Wrapper to SqrlAll(). See above.
@@ -94,7 +96,7 @@ SqrlAll <- function(argsl,
   #   A list (by SQRL source name) of the results of running the argsl
   #   command(s) on each of the SQRL sources. SQRL source names are unique.
   # SQRL Calls:
-  #   SqrlCache(), SqrlDelegate().
+  #   SqrlCache(), SqrlShell().
   # SQRL Callers:
   #   SqrlSources(), sqrlAll().
   # User:
@@ -110,7 +112,7 @@ SqrlAll <- function(argsl,
   {
     # Assigning NULL to a list element[[]] removes the element, whereas
     # assigning list(NULL) to element[] leaves the element with a NULL value.
-    results[datasource] <- base::list(SqrlDelegate(datasource, envir, argsl))
+    results[datasource] <- base::list(SqrlShell(datasource, envir, argsl))
   }
 
   # Return the results (listed by SQRL data source name).
@@ -226,11 +228,11 @@ SqrlClose <- function(datasource = "")
   # Returns:
   #   Invisible NULL, after closing the channel and removing the handle.
   # SQRL Calls:
-  #   SqrlParam().
+  #   SqrlParam(), SqrlTry().
   # RODBC Calls:
   #   odbcClose().
   # SQRL Callers:
-  #   SqrlCache(), SqrlDelegate(), SqrlIsOpen(), SqrlOff().
+  #   SqrlCache(), SqrlDelegate(), SqrlFile(), SqrlIsOpen(), SqrlOff().
   # User:
   #   Has no direct access, unable to pass argument indirectly. No argument
   #   validity checks are required.
@@ -242,8 +244,7 @@ SqrlClose <- function(datasource = "")
   }
 
   # Attempt to close the channel (which may, or may not, actually be open).
-  base::suppressWarnings(base::try(
-            RODBC::odbcClose(SqrlParam(datasource, "channel")), silent = TRUE))
+  SqrlTry(RODBC::odbcClose(SqrlParam(datasource, "channel")), warn = FALSE)
 
   # Whatever the situation, nullify the connection handle immediately. If the
   # channel somehow survived the close attempt, this makes it unusable. The
@@ -266,7 +267,8 @@ SqrlConfig <- function(datasource = "",
   #   When no configuration file is specified, this function acts as a getter,
   #   and returns a list of all SQRL/RODBC parameters and their current values.
   # SQRL Calls:
-  #   SqrlDefile(), SqrlInterface(), SqrlParams(), SqrlPath(), SqrlValue().
+  #   SqrlDefile(), SqrlFile(), SqrlInterface(), SqrlParam(), SqrlParams(),
+  #   SqrlPath(), SqrlValue().
   # SQRL Callers:
   #   SqrlDelegate(), SqrlHelp(), SqrlSource().
   # User:
@@ -467,7 +469,7 @@ SqrlDefault <- function(datasource = "",
     "name"                = datasource,
     "ping"                = NULL,
     "prompt"              = base::substr(datasource, 1L, 1L),
-    "ptemps"              = base::list(cacheenvir),
+    "pstack"              = base::list(cacheenvir),
     "result"              = NULL,
     "scdo"                = TRUE,
     "verbose"             = FALSE,
@@ -491,7 +493,7 @@ SqrlDefile <- function(parameter = "",
   #   A value for the parameter, either as supplied or as found within the
   #   supplied file (alternative).
   # SQRL Calls:
-  #   SqrlDefile() (self), SqrlParams(), SqrlPath().
+  #   SqrlDefile() (self), SqrlParams(), SqrlPath(), SqrlTry().
   # SQRL Callers:
   #   SqrlConfig(), SqrlDefile() (self), SqrlDelegate(), SqrlSource(),
   #   sqrlInterface().
@@ -534,17 +536,17 @@ SqrlDefile <- function(parameter = "",
     }
 
     # Otherwise, if the value doesn't evaluate, return it unmodified.
-    evaluated <- base::try(base::eval(base::parse(text = value),
-                                      base::new.env(parent = base::baseenv())),
-                            silent = TRUE)
-    if (base::inherits(evaluated, "try-error"))
+    evaluated <- SqrlTry(base::eval(
+                            base::parse(text = value, keep.source = FALSE),
+                            base::new.env(parent = base::baseenv())))
+    if (evaluated$error)
     {
       base::return(value)
     }
 
     # If the value evaluated to something odd (for example, 'ls' evaluates to a
     # function), return it unmodified.
-    eclass <- base::class(evaluated)
+    eclass <- base::class(evaluated$value)
     if (!(base::identical(eclass, base::class(NULL))
           || base::identical(eclass, base::class(base::logical()))
           || base::identical(eclass, base::class(base::character()))
@@ -555,7 +557,7 @@ SqrlDefile <- function(parameter = "",
     }
 
     # The value could be evaluated; return the evaluated value.
-    base::return(evaluated)
+    base::return(evaluated$value)
   }
 
   # Otherwise, the value specifies the path of a readable file. If the parameter
@@ -616,21 +618,21 @@ SqrlDelegate <- function(datasource = "",
 {
   # Interpret the command, and forward to the appropriate handler.
   # Args:
-  #   datasource : The name of a known database.
-  #   envir      : An R environment (only used when sourcing files).
+  #   datasource : The name of a known data source.
+  #   envir      : An R environment, from which variables are inherited.
   #   args.list  : A list of arguments, to be interpreted and actioned.
   #   nested     : Whether or not this call is descended from another.
   # Returns:
   #   The result of the command (normally a data frame, sometimes a string).
   # SQRL Calls:
   #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefile(), SqrlFile(),
-  #   SqrlHelp(), SqrlInterface(), SqrlIsOpen(), SqrlOpen(), SqrlParam(),
-  #   SqrlParams(), SqrlPath(), SqrlProc(), SqrlSources(), SqrlStatement(),
-  #   SqrlValue().
+  #   SqrlHelp(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(), SqrlOpen(),
+  #   SqrlParam(), SqrlParams(), SqrlPath(), SqrlProc(), SqrlSources(),
+  #   SqrlStatement(), SqrlTry(), SqrlValue().
   # RODBC Calls:
   #   sqlColumns(), sqlTables(), sqlTypeInfo().
   # SQRL Callers:
-  #   SqrlAll() (and data source interfaces).
+  #   SqrlFile() (via sqrl()), SqrlShell().
   # User:
   #   User has no direct access, but is able to supply (only) the args.list
   #   argument from sqrlAll() and/or any data source interface (including
@@ -780,7 +782,13 @@ SqrlDelegate <- function(datasource = "",
     if ("query" %in% args.names)
     {
       index <- base::which(args.names == "query")[1L]
-      script <- SqrlStatement(datasource, base::list(args.list[[index]]))
+      script <- SqrlTry(
+                    SqrlStatement(datasource, base::list(args.list[[index]])))
+      if (script$error)
+      {
+        base::stop(script$value)
+      }
+      script <- script$value
       params <- args.list[base::seq_along(args.list) != index]
       result <- base::withVisible(
                               SqrlFile(datasource, script, envir, params, TRUE))
@@ -832,9 +840,14 @@ SqrlDelegate <- function(datasource = "",
             path <- SqrlPath(args.list[[index]])
             if (base::is.null(path))
             {
-              SqrlFile(datasource,
-                      SqrlStatement(datasource, base::list(args.list[[index]])),
-                      envir, libmode = TRUE, literal = TRUE)
+              libdef <- SqrlTry(SqrlStatement(datasource,
+                                              base::list(args.list[[index]])))
+              if (libdef$error)
+              {
+                base::stop(libdef$value)
+              }
+              SqrlFile(datasource, libdef$value, envir,
+                        libmode = TRUE, literal = TRUE)
             } else
             {
               SqrlFile(datasource, path, envir, libmode = TRUE, literal = FALSE)
@@ -889,11 +902,12 @@ SqrlDelegate <- function(datasource = "",
     # Otherwise, treat the unnamed arguments as a literal script.
     } else
     {
-      script <- base::try(SqrlStatement(datasource, unnamed), silent = TRUE)
-      if (base::inherits(script, "try-error"))
+      script <- SqrlTry(SqrlStatement(datasource, unnamed))
+      if (script$error)
       {
-        base::stop(script)
+        base::stop(script$value)
       }
+      script <- script$value
       literal <- TRUE
     }
 
@@ -954,13 +968,13 @@ SqrlDelegate <- function(datasource = "",
                         base::class(base::character()))
       || (base::length(args.list[[1L]]) != 1L))
   {
-    statement <- base::try(SqrlStatement(datasource, args.list), silent = TRUE)
-    if (base::inherits(statement, "try-error"))
+    statement <- SqrlTry(SqrlStatement(datasource, args.list))
+    if (statement$error)
     {
-      base::stop(statement)
+      base::stop(statement$value)
     }
     result <- base::withVisible(
-                        SqrlFile(datasource, statement, envir, literal = TRUE))
+                  SqrlFile(datasource, statement$value, envir, literal = TRUE))
 
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
@@ -977,13 +991,13 @@ SqrlDelegate <- function(datasource = "",
   # If the first word looks like standard SQL, submit the unaltered command.
   if (base::tolower(first.word) %in% SqrlParams("sql-keywords"))
   {
-    statement <- base::try(SqrlStatement(datasource, args.list), silent = TRUE)
-    if (base::inherits(statement, "try-error"))
+    statement <- SqrlTry(SqrlStatement(datasource, args.list))
+    if (statement$error)
     {
-      base::stop(statement)
+      base::stop(statement$value)
     }
     result <- base::withVisible(
-                        SqrlFile(datasource, statement, envir, literal = TRUE))
+                  SqrlFile(datasource, statement$value, envir, literal = TRUE))
 
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
@@ -1034,21 +1048,24 @@ SqrlDelegate <- function(datasource = "",
   # If the first word is 'columns', call RODBC::sqlColumns() on the remainder.
   if ("columns" == first.word)
   {
+    if (first.word == only.word)
+    {
+      base::stop("Table not specified.")
+    }
     SqrlOpen(datasource)
     SqrlIndicator(datasource, "query")
-    result <- base::try(RODBC::sqlColumns(
-                                    channel = SqrlParam(datasource, "channel"),
-                                    sqtable = other.words,
-                                    errors = SqrlParam(datasource, "errors"),
-                                    as.is = TRUE),
-                        silent = TRUE)
+    result <- SqrlTry(RODBC::sqlColumns(
+                                  channel = SqrlParam(datasource, "channel"),
+                                  sqtable = other.words,
+                                  errors = SqrlParam(datasource, "errors"),
+                                  as.is = TRUE))
     SqrlIndicator(datasource, "done")
-    if (base::inherits(result, "try-error")
-        && SqrlParam(datasource, "error"))
+    if (result$error
+        && SqrlParam(datasource, "errors"))
     {
-      base::stop(result)
+      base::stop(result$value)
     }
-    base::return(result)
+    base::return(result$value)
   }
 
   # If the first word is 'config', get or set the configuration.
@@ -1166,19 +1183,18 @@ SqrlDelegate <- function(datasource = "",
     }
     SqrlOpen(datasource)
     SqrlIndicator(datasource, "query")
-    result <- base::try(RODBC::sqlTables(
+    result <- SqrlTry(RODBC::sqlTables(
                                   channel = SqrlParam(datasource, "channel"),
                                   errors = SqrlParam(datasource, "errors"),
                                   as.is = TRUE,
-                                  schema = schema),
-                        silent = TRUE)
+                                  schema = schema))
     SqrlIndicator(datasource, "done")
-    if (base::inherits(result, "try-error")
-        && SqrlParam(datasource, "error"))
+    if (result$error
+        && SqrlParam(datasource, "errors"))
     {
-      base::stop(result)
+      base::stop(result$value)
     }
-    base::return(result)
+    base::return(result$value)
   }
 
   # If the first word is 'typeinfo', call RODBC::sqlTypeInfo() on the others.
@@ -1187,19 +1203,18 @@ SqrlDelegate <- function(datasource = "",
     SqrlOpen(datasource)
     type <- base::ifelse(first.word == only.word, "all", other.words)
     SqrlIndicator(datasource, "query")
-    info <- base::try(RODBC::sqlTypeInfo(
-                                  channel = SqrlParam(datasource, "channel"),
-                                  type = type,
-                                  errors = SqrlParam(datasource, "errors"),
-                                  as.is = TRUE),
-                      silent = TRUE)
+    info <- SqrlTry(RODBC::sqlTypeInfo(
+                                channel = SqrlParam(datasource, "channel"),
+                                type = type,
+                                errors = SqrlParam(datasource, "errors"),
+                                as.is = TRUE))
     SqrlIndicator(datasource, "done")
-    if (base::inherits(info, "try-error")
-        && SqrlParam(datasource, "error"))
+    if (info$error
+        && SqrlParam(datasource, "errors"))
     {
-      base::stop(info)
+      base::stop(info$value)
     }
-    base::return(info)
+    base::return(info$value)
   }
 
   # When the first word is an SQRL/RODBC parameter, get or set that parameter.
@@ -1226,13 +1241,13 @@ SqrlDelegate <- function(datasource = "",
   }
 
   # Otherwise, submit the original unaltered command, via the parser.
-  statement <- base::try(SqrlStatement(datasource, args.list), silent = TRUE)
-  if (base::inherits(statement, "try-error"))
+  statement <- SqrlTry(SqrlStatement(datasource, args.list))
+  if (statement$error)
   {
-    base::stop(statement)
+    base::stop(statement$value)
   }
   result <- base::withVisible(
-                        SqrlFile(datasource, statement, envir, literal = TRUE))
+                  SqrlFile(datasource, statement$value, envir, literal = TRUE))
 
   SqrlParam(datasource, "result", result$value, override = TRUE)
   if (!result$visible)
@@ -1317,7 +1332,7 @@ SqrlFace <- function(interface = "",
   # SQRL Calls:
   #   SQRL:Face.
   # SQRL Callers:
-  #   SqrlInterface(), SqrlSource().
+  #   SqrlInterface().
   # User:
   #   Has no direct access, but is able to pass-in the interface argument (only)
   #   from SqrlInterface() or SqrlSource(). Both of these check that interface
@@ -1327,7 +1342,7 @@ SqrlFace <- function(interface = "",
   # This does not alter the data source's 'interface' parameter.
   if (!base::is.null(set))
   {
-    def <- base::eval(base::parse(text = set))
+    def <- base::eval(base::parse(text = set, keep.source = FALSE))
     base::assign(interface, def, "SQRL:Face")
     base::return(base::invisible(def))
   }
@@ -1394,11 +1409,12 @@ SqrlFile <- function(datasource = "",
   # Returns:
   #   Result of submitting the script.
   # SQRL Calls:
-  #   SqrlParam(), SqrlPL(), SqrlStatement(), SqrlSubScript().
-  # SQRL Callers:
-  #   SqrlDelegate().
+  #   SqrlClose(), SqrlDelegate (via sqrl()), SqrlParam(), SqrlParams(),
+  #   SqrlPL(), SqrlStatement(), SqrlSubScript(), SqrlTry().
   # utils Calls:
   #   head() (only if utils is attached).
+  # SQRL Callers:
+  #   SqrlConfig(), SqrlDelegate().
   # User:
   #   Has no direct access, but is able to submit (only) the script argument
   #  (only) via SqrlDelegate(). When script is a file path, SqrlDelegate() will
@@ -1412,8 +1428,8 @@ SqrlFile <- function(datasource = "",
 
   # Expand the temporary parameter stack by one layer, and ensure that layer is
   # removed whenever, and however, this function exits (cleanly or otherwise).
-  SqrlParam(datasource, "ptemps", "expand")
-  base::on.exit(SqrlParam(datasource, "ptemps", "contract"), add = TRUE)
+  SqrlParam(datasource, "pstack", "expand")
+  base::on.exit(SqrlParam(datasource, "pstack", "contract"), add = TRUE)
 
   # When the script argument is a file path, slurp the entirety of that file.
   # No ordinary script would be so large that this should be a problem.
@@ -1532,7 +1548,7 @@ SqrlFile <- function(datasource = "",
     base::assign("sqrl", base::eval(base::parse(text = base::paste0(
                   "function(...) {SqrlDelegate(\"", datasource,
                   "\", base::parent.frame(), base::list(...), ",
-                  "nested = TRUE)}"))), sqrl.env)
+                  "nested = TRUE)}"), keep.source = FALSE)), sqrl.env)
   }
 
   # Assign any supplied parameters to the processing environment. The supplied
@@ -2483,13 +2499,14 @@ SqrlFile <- function(datasource = "",
               expr <- base::substring(cond, 2L, base::nchar(cond) - 1L)
 
               # Evaluate the tag expression. On error, stop with exception.
-              tval <- base::try(base::withVisible(
-                                base::eval(base::parse(text = expr), sqrl.env)),
-                                silent = TRUE)
-              if (base::inherits(tval, "try-error"))
+              tval <- SqrlTry(base::withVisible(base::eval(
+                                  base::parse(text = expr, keep.source = FALSE),
+                                  sqrl.env)))
+              if (tval$error)
               {
-                base::stop(tval)
+                base::stop(tval$value)
               }
+              tval <- tval$value
 
               # In the case of a return tag, return the evaluated expression
               # (stop processing the SQRL script, and exit from this point).
@@ -2800,15 +2817,15 @@ SqrlFile <- function(datasource = "",
             && (i <= num.delims)
             && (pat[i] == "tag.endr"))
         {
-          sqlisedvalue <- base::try(SqrlStatement(datasource,
-                base::list(base::eval(base::parse(text = rscript), sqrl.env))),
-                silent = TRUE)
-          if (base::inherits(sqlisedvalue, "try-error"))
+          sqlisedvalue <- SqrlTry(SqrlStatement(datasource,
+                base::list(base::eval(
+                  base::parse(text = rscript, keep.source = FALSE), sqrl.env))))
+          if (sqlisedvalue$error)
           {
-            base::stop(sqlisedvalue)
+            base::stop(sqlisedvalue$value)
           }
-          pl <- SqrlPL(pl, sqlisedvalue)
-          statement <- base::append(statement, sqlisedvalue)
+          pl <- SqrlPL(pl, sqlisedvalue$value)
+          statement <- base::append(statement, sqlisedvalue$value)
 
         # Otherwise (R post-processing), evaluate and retain the result.
         } else
@@ -2831,21 +2848,23 @@ SqrlFile <- function(datasource = "",
 
           # Evaluate the script, and retain the result, only if the script is
           # non-empty (in the sense of containing no uncommented statements).
-          parsed <- base::try(base::parse(text = rscript), silent = TRUE)
-          if (base::inherits(parsed, "try-error"))
+          parsed <- SqrlTry(base::parse(text = rscript, keep.source = FALSE))
+          if (parsed$error)
           {
-            base::stop(parsed)
+            base::stop(parsed$value)
           }
-          if (!base::identical(base::as.character(parsed), base::character(0L)))
+          if (!base::identical(base::as.character(parsed$value),
+                                base::character(0L)))
           {
             # Evaluate the script, retain the result. As above, stop with an
             # error should such occur.
-            result <- base::try(base::withVisible(base::eval(parsed, sqrl.env)),
-                                silent = TRUE)
-            if (base::inherits(result, "try-error"))
+            result <- SqrlTry(
+                          base::withVisible(base::eval(parsed$value, sqrl.env)))
+            if (result$error)
             {
-              base::stop(result)
+              base::stop(result$value)
             }
+            result <- result$value
 
             # If verbose, output (some of) the result. This could be any object,
             # with no guarantee of either the head() or print() methods.
@@ -2855,13 +2874,12 @@ SqrlFile <- function(datasource = "",
               printed <- FALSE
               if ("package:utils" %in% base::search())
               {
-                top <- base::try(utils::head(result$value), silent = TRUE)
-                if (!base::inherits(top, "try-error"))
+                top <- SqrlTry(utils::head(result$value))
+                if (!top$error)
                 {
-                  printed <- !base::inherits(base::try(base::print(top),
-                                              silent = TRUE), "try-error")
+                  printed <- !SqrlTry(base::print(top$value))$error
                   if (printed
-                      && !base::identical(top, result$value))
+                      && !base::identical(top$value, result$value))
                   {
                     base::cat("(output truncated)\n")
                   }
@@ -2985,16 +3003,26 @@ SqrlFile <- function(datasource = "",
 
         # Attempt to parse the entire withs-script to an R expression.
         # Expressions remain unevaluated at this point.
-        if (base::inherits(base::try(
-                        withs <- base::parse(text = withs, keep.source = FALSE),
-                            silent = TRUE), "try-error"))
+        withs <- SqrlTry(base::parse(text = withs, keep.source = FALSE))
+        if (withs$error)
         {
           base::stop("Failed to parse <with> block.")
         }
+        withs <- withs$value
 
         # Create a sub-environment of the main-script working environment
         # (sqrl.env), within which to evaluate expressions of the withs-script.
         w.env <- base::new.env(parent = sqrl.env)
+
+        # Consistently apply the verbose mode in effect prior to the <with>
+        # block (whether or not the verbose value is changed within the block).
+        verbose <- base::interactive() && SqrlParam(datasource, "verbose")
+
+        # In verbose mode, add vertical whitespace before showing the values.
+        if (verbose)
+        {
+          base::cat("\n")
+        }
 
         # Evaluate each item of the withs-script expression in turn.
         for (w.itm in withs)
@@ -3003,7 +3031,8 @@ SqrlFile <- function(datasource = "",
           # back to an expression. This ought to succeed, since the expression
           # has been parsed before (as a part of the whole block, just above).
           w.txt <- base::paste0(base::deparse(w.itm), collapse = "\n")
-          w.exp <- base::parse(text = base::paste0("list", "(", w.txt, ")"))
+          w.exp <- base::parse(text = base::paste0("list", "(", w.txt, ")"),
+                                keep.source = FALSE)
 
           # Evaluate the expression with the with-block sub-environment.
           # Errors here are fatal. Warnings are visible.
@@ -3024,16 +3053,21 @@ SqrlFile <- function(datasource = "",
             }
 
             # Attempt to set the temporary parameter value.
-            SqrlParam(datasource, "ptemps", w.val)
+            SqrlParam(datasource, "pstack", w.val)
 
             # If in verbose mode, print the temporary value.
-            if (base::interactive()
-                && SqrlParam(datasource, "verbose"))
+            if (verbose)
             {
-              w.val <- base::paste(SqrlParam(datasource, w.par), collapse = " ")
-              base::print(base::paste("Using:", w.par, "=", w.val))
+              w.val <- base::deparse(SqrlParam(datasource, w.par))
+              base::cat("Using:", w.par, "=", w.val, "\n")
             }
           }
+        }
+
+        # In verbose mode, add vertical whitespace after showing the values.
+        if (verbose)
+        {
+          base::cat("\n")
         }
       }
 
@@ -3158,14 +3192,14 @@ SqrlHelp <- function(datasource = "",
   # Returns:
   #   Invisible NULL, after displaying help.
   # SQRL Calls:
-  #   SqrlConfig(), SqrlHelp() (self), SqrlHelper(), SqrlPath(), SqrlToUser(),
+  #   SqrlConfig(), SqrlHelp() (self), SqrlHelper(), SqrlPath(), SqrlTry(),
   #   srqlHelp.
-  # SQRL Callers:
-  #   SqrlDelegate(), SqrlHelp() (self), .onLoad(), .onUnload().
   # tools Calls:
   #   Rd2HTML(), Rd2txt() (only if the tools package is installed).
   # utils Calls:
   #   browseURL(), help() (only if utils is attached).
+  # SQRL Callers:
+  #   SqrlDelegate(), SqrlHelp() (self), .onLoad(), .onUnload().
   # User:
   #   Has no direct access, but is able to submit (only) the 'type' argument.
   #   That is coerced to an allowed value, and no further checks are required.
@@ -3208,8 +3242,8 @@ SqrlHelp <- function(datasource = "",
   }
 
   # The tools package is available. We shall dynamically generate tailored help
-  # for the invoking (database's) interface function. This involves temp files.
-  # Remove any existing SQRL temp files (from a previous SqrlHelp() call).
+  # for the invoking (data source's) interface function. This involves temp
+  # files. Remove any existing SQRL temp files (from any prior SqrlHelp() call).
   temps <- SqrlHelp(clean = TRUE)
 
   # Obtain the current source configuration (all parameter values).
@@ -3269,7 +3303,7 @@ SqrlHelp <- function(datasource = "",
   # in case the one of the parameter values happens to contain that sequence.
   helprd <- base::c(
     base::paste0("\\name{", iface, "}"),
-    base::paste0("\\title{Interface Function \\sQuote{", iface, "}}"),
+    base::paste0("\\title{ODBC Interface Function \\sQuote{", iface, "}}"),
     "\\description{",
     base::paste0("The function \\code{", iface, "} is"),
     base::paste0("the interface to the data source ", dsrc,"."),
@@ -3385,9 +3419,8 @@ SqrlHelp <- function(datasource = "",
     # RStudio viewer, and return invisible NULL. Note the use of basename().
     htmlfile <- base::tempfile(fileext = ".html")
     base::assign("temps", base::c(temps, htmlfile), srqlHelp)
-    if (base::inherits(base::try(tools::Rd2HTML(rdfile, htmlfile,
-                        package = "SQRL", stylesheet = base::basename(cssfile)),
-                        silent = TRUE), "try-error"))
+    if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
+                                stylesheet = base::basename(cssfile)))$error)
     {
       base::return(utils::help("sqrlUsage"))
     }
@@ -3402,8 +3435,8 @@ SqrlHelp <- function(datasource = "",
     htmlfile <- base::tempfile(fileext = ".html")
     base::assign("temps", base::c(temps, htmlfile), srqlHelp)
     cssfile <- base::paste0(base::R.home(), "/library/base/html/R.css")
-    if (base::inherits(base::try(tools::Rd2HTML(rdfile, htmlfile,
-        package = "SQRL", stylesheet = cssfile), silent = TRUE), "try-error"))
+    if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
+                                stylesheet = cssfile)$error))
     {
       base::return(utils::help("sqrlUsage", help_type = "html"))
     }
@@ -3415,8 +3448,7 @@ SqrlHelp <- function(datasource = "",
   # that file in the default text viewer (pager), and return invisible NULL.
   txtfile <- base::tempfile(fileext = ".txt")
   base::assign("temps", base::c(temps, txtfile), srqlHelp)
-  if (base::inherits(base::try(tools::Rd2txt(rdfile, txtfile, package = "SQRL"),
-                                silent = TRUE), "try-error"))
+  if (SqrlTry(tools::Rd2txt(rdfile, txtfile, package = "SQRL"))$error)
   {
     base::return(utils::help("sqrlUsage", help_type = "text"))
   }
@@ -3490,7 +3522,7 @@ SqrlIndicator <- function(datasource = "",
   #   getWindowTitle(), setWindowTitle() (only if the utils package is attached,
   #   and these two functions exist within it on the current OS/platform).
   # SQRL Callers:
-  #   SqrlParam(), SqrlPing(), SqrlSubmit().
+  #   SqrlDelegate(), SqrlParam(), SqrlPing(), SqrlSubmit().
   # User:
   #   Has no direct access, and is unable to indirectly supply any of the
   #   arguments. Argument validity checks are not required.
@@ -3669,7 +3701,7 @@ SqrlInterface <- function(datasource = "",
   #   function. The interface value could be anything, and is checked here.
 
   # This is the user-interface function-body definition for the data source.
-  uibody <- base::paste0("function(...) {SqrlDelegate(\"", datasource,
+  uibody <- base::paste0("function(...) {SqrlShell(\"", datasource,
                           "\", base::parent.frame(), base::list(...))}")
 
   # Abort on invalid interface (name). Allowed values are NULL or a character
@@ -3804,23 +3836,27 @@ SqrlIsOpen <- function(datasource = "",
   #   TRUE if the data source exists, and SQRL has an open channel to it.
   #   FALSE, otherwise.
   # SQRL Calls:
-  #   SqrlClose(), SqrlParam(), SqrlPing().
+  #   SqrlClose(), SqrlParam(), SqrlPing(), SqrlTry().
   # RODBC Calls:
   #   odbcGetInfo().
   # SQRL Callers:
-  #   SqrlDelegate(), SqrlOpen(), SqrlParam(), SqrlSources(), SqrlSubmit().
+  #   SqrlDelegate(), SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(),
+  #   SqrlSubmit().
   # User:
   #   Has no direct access, and is unable to indirectly supply either argument.
   #   Argument validity checks are not required.
 
   # Attempt to obtain the channel parameter value for the specified data source.
-  channel <- base::try(SqrlParam(datasource, "channel"), silent = TRUE)
+  channel <- SqrlTry(SqrlParam(datasource, "channel"), warn = FALSE)
 
   # Return FALSE when the datasource is invalid (does not exist => is not open).
-  if (base::inherits(channel, "try-error"))
+  if (channel$error)
   {
     base::return(FALSE)
   }
+
+  # Isolate the value of the channel parameter (strip the SqrlTty() error flag).
+  channel <- channel$value
 
   # Return FALSE when the channel is closed (and we knew that).
   if (base::is.null(channel))
@@ -3840,10 +3876,10 @@ SqrlIsOpen <- function(datasource = "",
   # been closed from our end, or is not of RODBC class (repeating, in effect,
   # the test above), but will succeed if the channel has been closed from the
   # other end (and we were previously unaware of that).
-  channel.info <- base::try(RODBC::odbcGetInfo(channel), silent = TRUE)
+  info <- SqrlTry(RODBC::odbcGetInfo(channel), warn = FALSE)
 
   # Return FALSE when the channel is closed (but we thought it was open).
-  if (base::inherits(channel.info, "try-error"))
+  if (info$error)
   {
     SqrlClose(datasource)
     base::return(FALSE)
@@ -3879,7 +3915,7 @@ SqrlOff <- function()
   # Returns:
   #   Invisible NULL, after closing channels and detaching SQRL.
   # SQRL Calls:
-  #   SqrlCache(), SqrlClose(), SqrlInterface().
+  #   SqrlCache(), SqrlClose(), SqrlInterface(), SqrlTry().
   # RODBC Calls:
   #   odbcCloseAll().
   # SQRL Callers:
@@ -3895,23 +3931,21 @@ SqrlOff <- function()
   # try(), because we don't want one hiccup to block any other activity.
   for (datasource in SqrlCache("*"))
   {
-    base::suppressWarnings(base::try(SqrlClose(datasource), silent = TRUE))
-    base::suppressWarnings(
-            base::try(SqrlInterface(datasource, "remove"), silent = TRUE))
+    SqrlTry(SqrlClose(datasource), warn = FALSE)
+    SqrlTry(SqrlInterface(datasource, "remove"), warn = FALSE)
     cache <- SqrlCache(datasource)
-    base::suppressWarnings(base::try(base::remove(
-                            list = base::objects(pos = cache, all.names = TRUE),
-                            pos = cache), silent = TRUE))
+    SqrlTry(base::remove(list = base::objects(pos = cache, all.names = TRUE),
+                          pos = cache), warn = FALSE)
   }
 
   # Detach the public SQRL:Face (interfaces) environment. The garbage collector
   # should handle the rest. Again, wrapped in try() so that a failure here won't
   # have knock-on effects.
-  base::try(base::detach("SQRL:Face"))
+  SqrlTry(base::detach("SQRL:Face"), warn = FALSE)
 
   # Detach and unload the SQRL package. The .onUnload() function attempts to
   # detach SQRL:Face once again (but this doesn't matter).
-  base::try(base::detach("package:SQRL", unload = TRUE))
+  SqrlTry(base::detach("package:SQRL", unload = TRUE), warn = FALSE)
 
   # Return invisible NULL.
   base::return(base::invisible(NULL))
@@ -3926,7 +3960,7 @@ SqrlOpen <- function(datasource = "")
   #   Invisible NULL, after creating and caching the data source channel.
   #   Will throw a fatal exception should the connection attempt fail.
   # SQRL Calls:
-  #   SqrlIsOpen(), SqrlParam(), SqrlParams(), SqrlPing().
+  #   SqrlIsOpen(), SqrlParam(), SqrlParams(), SqrlPing(), SqrlTry().
   # RODBC Calls:
   #   odbcConnect(), odbcDriverConnect()
   # SQRL Callers:
@@ -3956,7 +3990,7 @@ SqrlOpen <- function(datasource = "")
                                 SqrlParam(datasource, param),
                                 connection, fixed = TRUE)
     }
-    channel <- base::try(
+    channel <- SqrlTry(
                 RODBC::odbcDriverConnect(
                   connection = connection,
                   case = SqrlParam(datasource, "case"),
@@ -3989,7 +4023,7 @@ SqrlOpen <- function(datasource = "")
     {
       pwd <- SqrlParam(datasource, "pwd")
     }
-    channel <- base::try(
+    channel <- SqrlTry(
                 RODBC::odbcConnect(
                   dsn = SqrlParam(datasource, "dsn"),
                   uid = uid,
@@ -4006,14 +4040,17 @@ SqrlOpen <- function(datasource = "")
 
   # Halt and notify on failure to connect. Might just be an incorrect password,
   # but could also be a network or server outage, etc. Fatal error, regardless.
-  if (base::inherits(channel, "try-error")
-      || !base::identical(base::class(channel), "RODBC"))
+  # When RODBC::odbcConnect or RODBC::odbcDriverConnect encounter a failure to
+  # connect, they do not stop with an error message, but instead return -1 and
+  # throw warning messages with the details.
+  if (channel$error
+      || !base::identical(base::class(channel$value), "RODBC"))
   {
     base::stop("Connection attempt failed.")
   }
 
   # Looks like a valid connection channel was established. Record handle.
-  SqrlParam(datasource, "channel", channel)
+  channel <- SqrlParam(datasource, "channel", channel$value)
 
   # Double-check. If the connection attempt was unsuccessful, halt and notify.
   if (!SqrlIsOpen(datasource))
@@ -4078,10 +4115,11 @@ SqrlParam <- function(datasource = "",
   # RODBC Calls:
   #   odbcDataSources().
   # SQRL Callers:
-  #   SqrlCache(), SqrlClose(), SqrlDefault(), SqrlDelegate(), SqrlDSNs(),
-  #   SqrlFile(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(), SqrlOpen(),
-  #   SqrlParam() (self), SqrlPing(), SqrlProc(), SqrlSource(), SqrlSubmit(),
-  #   SqrlSubScript(), SqrlStatement(), SqrlValue(), sqrlInterface().
+  #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefault(), SqrlDelegate(),
+  #   SqrlDSNs(), SqrlFile(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(),
+  #   SqrlOpen(), SqrlParam() (self), SqrlPing(), SqrlProc(), SqrlShell(),
+  #   SqrlStatement(), SqrlSource(), SqrlSubmit(), SqrlSubScript(),
+  #   SqrlStatement(), SqrlValue(), sqrlInterface().
   # User:
   #   Has no direct access, but is able to supply (only) parameter and set via
   #   SqrlDelegate() and/or SqrlConfig(), by way of SqrlValue(). SqrlDelegate()
@@ -4201,27 +4239,27 @@ SqrlParam <- function(datasource = "",
   if (base::missing(set))
   {
     # Obtain the temporary parameter-values (environments) stack (a list).
-    ptemps <- if (base::exists("ptemps", cacheenvir, inherits = FALSE))
+    pstack <- if (base::exists("pstack", cacheenvir, inherits = FALSE))
               {
-                base::get("ptemps", cacheenvir, inherits = FALSE)
+                base::get("pstack", cacheenvir, inherits = FALSE)
               } else
               {
-                SqrlDefault(datasource, "ptemps")
+                SqrlDefault(datasource, "pstack")
               }
 
     # If the stack itself was sought, return it.
-    if (parameter == "ptemps")
+    if (parameter == "pstack")
     {
-      base::return(ptemps)
+      base::return(pstack)
     }
 
     # Otherwise, extract the last environment from the temporary-values stack.
     # This inherits from the previous environment (and so on, to the first).
-    ptemps <- ptemps[[base::length(ptemps)]]
+    pstack <- pstack[[base::length(pstack)]]
 
     # When there is no set value (temporary or cached) for the parameter,
     # return its default. Default values are never secret or semi-secret.
-    if (!base::exists(parameter, ptemps, inherits = TRUE))
+    if (!base::exists(parameter, pstack, inherits = TRUE))
     {
       base::return(SqrlDefault(datasource, parameter))
     }
@@ -4249,7 +4287,7 @@ SqrlParam <- function(datasource = "",
       # been set) or a dummy value (when some non-default value has been set).
       if (calls[i] %in% SqrlParams("aware"))
       {
-        value <- base::get(parameter, ptemps, inherits = TRUE)
+        value <- base::get(parameter, pstack, inherits = TRUE)
         if (base::identical(value, SqrlDefault(datasource, parameter)))
         {
           base::return(value)
@@ -4291,7 +4329,7 @@ SqrlParam <- function(datasource = "",
 
     # The parameter is not secret, or the caller is allowed to know its value.
     # Return the current (temporary or cached) value.
-    base::return(base::get(parameter, ptemps, inherits = TRUE))
+    base::return(base::get(parameter, pstack, inherits = TRUE))
   }
 
   # The set argument has been supplied; act as a setter (cache and return).
@@ -4301,18 +4339,18 @@ SqrlParam <- function(datasource = "",
   istemp <- FALSE
   targetenvir <- cacheenvir
 
-  # However, if the parameter is 'ptemps' and the set value is named, then this
+  # However, if the parameter is 'pstack' and the set value is named, then this
   # is reinterpreted as a request to assign a temporary value (value-of-set) for
   # the named parameter (name-of-set) into the most recent environment of the
-  # temporary values stack (ptemps).
-  if ((parameter == "ptemps")
+  # temporary values stack (pstack).
+  if ((parameter == "pstack")
       && !base::is.null(base::names(set)))
   {
     parameter <- base::names(set)
     set <- set[[1L]]
     istemp <- TRUE
-    ptemps <- SqrlParam(datasource, "ptemps")
-    targetenvir <- ptemps[[base::length(ptemps)]]
+    pstack <- SqrlParam(datasource, "pstack")
+    targetenvir <- pstack[[base::length(pstack)]]
     if ((base::length(parameter) != 1L)
         || !(parameter %in% SqrlParams("all")))
     {
@@ -4324,31 +4362,34 @@ SqrlParam <- function(datasource = "",
     }
   }
 
-  # In the special case where the parameter is (still) 'ptemps', we have a
+  # In the special case where the parameter is (still) 'pstack', we have a
   # request to expand or contract the temporary-values environments stack.
-  if (parameter == "ptemps")
+  if (parameter == "pstack")
   {
-    ptemps <- SqrlParam(datasource, parameter)
-    ptop <- base::length(ptemps)
+    pstack <- SqrlParam(datasource, parameter)
+    ptop <- base::length(pstack)
     if (set == "expand")
     {
-      ptemps <- base::append(ptemps, base::new.env(parent = ptemps[[ptop]]))
-    } else if (base::length(ptemps) >= 2L)
+      pstack <- base::append(pstack, base::new.env(parent = pstack[[ptop]]))
+    } else if (base::length(pstack) >= 2L)
     {
-      tpars <- base::objects(ptemps[[ptop]])
+      tpars <- base::objects(pstack[[ptop]])
       verbose <- base::interactive() && SqrlParam(datasource, "verbose")
-      base::remove(list = tpars, pos = ptemps[[ptop]])
-      ptemps <- ptemps[-ptop]
-      if (verbose)
+      base::remove(list = tpars, pos = pstack[[ptop]])
+      pstack <- pstack[-ptop]
+      if ((base::length(tpars) > 0L)
+          && verbose)
       {
+        base::cat("\n")
         for (tpar in tpars)
         {
-          base::print(base::paste("Reverting:", tpar, "=",
-                                  SqrlParam(datasource, tpar)))
+          rval <- base::deparse(SqrlParam(datasource, tpar))
+          base::cat("Reverting:", tpar, "=", rval, "\n")
         }
+        base::cat("\n")
       }
     }
-    base::assign(parameter, ptemps, cacheenvir)
+    base::assign(parameter, pstack, cacheenvir)
     base::return(base::invisible(set))
   }
 
@@ -4728,7 +4769,7 @@ SqrlParam <- function(datasource = "",
   if (parameter == "libstack")
   {
     # This shouldn't ever happen (unless the libstack storage mechanism is
-    # changed to having a library within each layer of the ptemps stack), but
+    # changed to having a library within each layer of the pstack stack), but
     # we check here anyway, just in case.
     if (istemp)
     {
@@ -4811,8 +4852,8 @@ SqrlParams <- function(group = "")
   #   None.
   # SQRL Callers:
   #   SqrlCache(), SqrlConfig(), SqrlDefile(), SqrlDelegate(), SqrlDSNs(),
-  #   SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(), SqrlValue(),
-  #   sqrlAll().
+  #   SqrlFile(), SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(),
+  #   SqrlValue(), sqrlAll().
   # User:
   #   Has no direct access, and is unable to supply the argument. Validity
   #   checks are not required.
@@ -5059,7 +5100,7 @@ SqrlPath <- function(path)
   #   The normalised file path, when ... appears to specify an existing file,
   #   or NULL, when ... does not appear to specify an existing file.
   # SQRL Calls:
-  #   None.
+  #   SqrlTry().
   # SQRL Callers:
   #   SqrlConfig(), SqrlDefile(), SqrlDelegate(), SqrlHelp(), SqrlSource().
   # User:
@@ -5067,12 +5108,17 @@ SqrlPath <- function(path)
   #   SqrlDelegate(). Unexpected input is silently caught.
 
   # Paste all arguments together.
-  path <- base::try(base::paste0(base::unlist(path), collapse = ""),
-                    silent = TRUE)
+  path <- SqrlTry(base::paste0(base::unlist(path), collapse = ""), warn = FALSE)
 
-  # If path isn't a single string, it cannot specify a file (return NULL).
-  if (base::inherits(path, "try-error")
-      || (base::length(path) != 1L)
+  # If pasting failed, the arguments must not specify a file (return NULL).
+  if (path$error)
+  {
+    base::return(NULL)
+  }
+
+  # If the path isn't a single string, it cannot specify a file (return NULL).
+  path <- path$value
+  if ((base::length(path) != 1L)
       || (base::nchar(path) < 1L))
   {
     base::return(NULL)
@@ -5103,7 +5149,7 @@ SqrlPing <- function(datasource,
   #   In set mode, the resulting ping query, as a character string. In ping
   #   mode, TRUE if the source responded (is connected to), FALSE otherwise.
   # SQRL Calls:
-  #   SqrlIndicator(), SqrlParam(), SqrlPing() (self).
+  #   SqrlIndicator(), SqrlParam(), SqrlPing() (self), SqrlTry().
   # RODBC Calls:
   #   odbcQuery(), sqlQuery().
   # SQRL Callers:
@@ -5182,18 +5228,18 @@ SqrlPing <- function(datasource,
 
       # Submit the ping query, and retrieve the status code (which takes either
       # of two values: 1L for success, or -1L for failure).
-      s <- base::try(RODBC::odbcQuery(
+      s <- SqrlTry(RODBC::odbcQuery(
                           channel = SqrlParam(datasource, "channel"),
                           query = ping,
                           rows_at_time = SqrlParam(datasource, "rows_at_time")),
-                      silent = TRUE)
+                    warn = FALSE)
 
       # Remove ping-in-progress marker from the window-title indicator.
       SqrlIndicator(datasource, "done")
 
       # An error suggests the connection is closed; return FALSE.
       # No error implies the connection is open; return TRUE.
-      base::return(!(base::inherits(s, "try-error") || (s == -1L)))
+      base::return(!(s$error || (s$value == -1L)))
     }
 
     # Otherwise, use RODBC::sqlQuery(), with errors = FALSE, and as.is = TRUE.
@@ -5201,8 +5247,8 @@ SqrlPing <- function(datasource,
     # parameter values. With errors = FALSE, the function returns integer -1 on
     # failure, and something else otherwise (a character vector or data frame).
     SqrlIndicator(datasource, "ping")
-    s <- base::try(
-          RODBC::sqlQuery(channel = SqrlParam(datasource, "channel"),
+    s <- SqrlTry(RODBC::sqlQuery(
+                          channel = SqrlParam(datasource, "channel"),
                           query = ping,
                           errors = FALSE,
                           as.is = TRUE,
@@ -5214,17 +5260,17 @@ SqrlPing <- function(datasource,
                           dec = SqrlParam(datasource, "dec"),
                           stringsAsFactors = FALSE,
                           rows_at_time = SqrlParam(datasource, "rows_at_time")),
-          silent = TRUE)
+                  warn = FALSE)
     SqrlIndicator(datasource, "done")
-    base::return(!(base::inherits(s, "try-error") || base::identical(s, -1L)))
+    base::return(!(s$error || base::identical(s$value, -1L)))
   }
 
   # In the absence of a ping query, submit a junk statement in an attempt to
   # cause the driver to generate an error message that indicates whether or not
   # that query was received by the source. This will not be completely reliable.
   SqrlIndicator(datasource, "ping")
-  s <- base::try(
-          RODBC::sqlQuery(channel = SqrlParam(datasource, "channel"),
+  s <- SqrlTry(RODBC::sqlQuery(
+                          channel = SqrlParam(datasource, "channel"),
                           query = "junk",
                           errors = TRUE,
                           as.is = TRUE,
@@ -5236,14 +5282,14 @@ SqrlPing <- function(datasource,
                           dec = SqrlParam(datasource, "dec"),
                           stringsAsFactors = FALSE,
                           rows_at_time = SqrlParam(datasource, "rows_at_time")),
-          silent = TRUE)
+                warn = FALSE)
   SqrlIndicator(datasource, "done")
 
   # The error message should be a character vector. If we got something else,
   # take the connection to be closed (it probably is, but might not be).
-  if (base::inherits(s, "try-error")
-      || !base::identical(base::class(s), base::class(base::character()))
-      || (base::length(s) == 0L))
+  if (s$error
+      || !base::identical(base::class(s$value), base::class(base::character()))
+      || (base::length(s$value) == 0L))
   {
     base::return(FALSE)
   }
@@ -5252,7 +5298,7 @@ SqrlPing <- function(datasource,
   # connection, assume that's the case (although we might be mistaken).
   for (word in base::c("sock", "libc", "connection", "reset", "open", "closed"))
   {
-    if (base::any(base::grepl(word, s, fixed = TRUE)))
+    if (base::any(base::grepl(word, s$value, fixed = TRUE)))
     {
       base::return(FALSE)
     }
@@ -5351,7 +5397,7 @@ SqrlProc <- function(datasource,
   #    The definition of the named procedure, as a character string. When no
   #    procedure matches the supplied name, NULL is returned instead.
   # SQRL Calls:
-  #   SqrlParam().
+  #   SqrlParam(), SqrlTry().
   # SQRL Callers:
   #   SqrlDelegate().
   # User:
@@ -5359,12 +5405,17 @@ SqrlProc <- function(datasource,
   #   SqrlDelegate(). Exceptions from unexpected input are silently caught.
 
   # Collapse proc, which could be supplied as components, to a single string.
-  proc <- base::try(base::paste0(base::unlist(proc), collapse = ""),
-                    silent = TRUE)
+  proc <- SqrlTry(base::paste0(base::unlist(proc), collapse = ""), warn = FALSE)
+
+  # If pasting failed, proc can't name a procedure (retun NULL).
+  if (proc$error)
+  {
+    base::return(NULL)
+  }
+  proc <- proc$value
 
   # If proc isn't a single string, it cannot name a procedure (return NULL).
-  if (base::inherits(proc, "try-error")
-      || (base::length(proc) != 1L)
+  if ((base::length(proc) != 1L)
       || (base::nchar(proc) < 1L))
   {
     base::return(NULL)
@@ -5391,6 +5442,55 @@ SqrlProc <- function(datasource,
 
   # The name does not refer to any stored procedure. Return NULL.
   base::return(NULL)
+}
+
+SqrlShell <- function(datasource = "",
+                      envir = base::parent.frame(),
+                      args.list)
+{
+  # Relays commands from public interface functions to the private interpreter.
+  # Args:
+  #   datasource : The name of a known data source.
+  #   envir      : An R environment, from which variables are inherited.
+  #   args.list  : A list of arguments, to be interpreted and actioned.
+  # Returns:
+  #   The result of the command (frequently a data frame, string or list).
+  # SQRL Calls:
+  #   SqrlDelegate(), SqrlParam(), SqrlTry().
+  # SQRL Callers:
+  #   SqrlAll() (and data source interfaces).
+  # User:
+  #   User has no direct access, but is able to supply (only) the args.list
+  #   argument from sqrlAll() and/or any data source interface functions). Since
+  #   args.list is unrestricted (it could be SQL), no argument validity checking
+  #   is performed here.
+
+  # Relay the arguments to SqrlDelegate, for interpretation and evaluation,
+  # while trapping any error that might occur.
+  x <- SqrlTry(base::withVisible(SqrlDelegate(datasource, envir, args.list)))
+
+  # If an error occurred, throw a concise error message, showing only the top-
+  # level interface function (or data source name), rather than the originating
+  # internal function with all its messy arguments.
+  if (x$error)
+  {
+    f <- SqrlParam(datasource, "interface")
+    if (!base::is.null(f))
+    {
+      k <- base::parse(text = base::paste0(f, "(...)"), keep.source = FALSE)
+      base::stop(base::simpleError(x$value, k[[1L]]))
+    }
+    s <- base::parse(text = datasource, keep.source = FALSE)
+    base::stop(base::simpleError(x$value, s[[1L]]))
+  }
+
+  # No error occurred. Return the result visibly or invisibly, as intended.
+  x <- x$value
+  if (!x$visible)
+  {
+    base::return(base::invisible(x$value))
+  }
+  base::return(x$value)
 }
 
 SqrlStatement <- function(datasource,
@@ -5435,8 +5535,8 @@ SqrlSource <- function(def)
   #   The interface name, invisibly, after creating, or re-defining, the source
   #   and its interface.
   # SQRL Calls:
-  #   SqrlCache(), SqrlConfig(), SqrlDefile(), SqrlFace(), SqrlInterface(),
-  #   SqrlParam(), SqrlParams(), SqrlPath().
+  #   SqrlCache(), SqrlConfig(), SqrlDefile(), SqrlInterface(), SqrlIsOpen(),
+  #   SqrlParam(), SqrlParams(), SqrlPath(), SqrlTry().
   # SQRL Callers:
   #   sqrlSource().
   # User:
@@ -5648,11 +5748,11 @@ SqrlSource <- function(def)
   # (or neither) is the case, and handle appropriately.
   if ("config" %in% base::names(def))
   {
-    result <- base::try(SqrlConfig(name, def$config), silent = TRUE)
-    if (base::inherits(result, "try-error"))
+    result <- SqrlTry(SqrlConfig(name, def$config))
+    if (result$error)
     {
       SqrlCache(name, delete = TRUE)
-      base::stop(result)
+      base::stop(result$value)
     }
   }
 
@@ -5661,13 +5761,12 @@ SqrlSource <- function(def)
   # source is deleted upon error.
   if ("interface" %in% base::names(def))
   {
-    result <- base::try(
-                  SqrlInterface(name, SqrlDefile("interface", def$interface)),
-                  silent = TRUE)
-    if (base::inherits(result, "try-error"))
+    result <- SqrlTry(
+                  SqrlInterface(name, SqrlDefile("interface", def$interface)))
+    if (result$error)
     {
       SqrlCache(name, delete = TRUE)
-      base::stop(result)
+      base::stop(result$value)
     }
   }
 
@@ -5679,12 +5778,11 @@ SqrlSource <- function(def)
   params <- base::c(params[params != "driver"], params[params == "driver"])
   for (param in params)
   {
-    result <- base::try(SqrlParam(name, param, SqrlDefile(param, def[[param]])),
-                        silent = TRUE)
-    if (base::inherits(result, "try-error"))
+    result <- SqrlTry(SqrlParam(name, param, SqrlDefile(param, def[[param]])))
+    if (result$error)
     {
       SqrlCache(name, delete = TRUE)
-      base::stop(result)
+      base::stop(result$value)
     }
   }
 
@@ -5692,11 +5790,11 @@ SqrlSource <- function(def)
   # incomplete source will be deleted if this is not possible.
   if (SqrlParam(name, "interface", isdefined = FALSE))
   {
-    result <- base::try(SqrlInterface(name, name), silent = TRUE)
-    if (base::inherits(result, "try-error"))
+    result <- SqrlTry(SqrlInterface(name, name))
+    if (result$error)
     {
       SqrlCache(name, delete = TRUE)
-      base::stop(result)
+      base::stop(result$value)
     }
   }
 
@@ -5784,9 +5882,9 @@ SqrlSubmit <- function(datasource,
   #   Result of submitting the statement (typically a data frame).
   # SQRL Calls:
   #   SqrlIndicator(), SqrlIsOpen(), SqrlOpen(), SqrlParam(),
-  #   SqrlSubmit() (self).
+  #   SqrlSubmit() (self), SqrlTry().
   # RODBC Calls:
-  #   sqlGetResults(), sqlQuery().
+  #   odbcGetErrMsg, odbcQuery, sqlGetResults(), sqlQuery().
   # SQRL Callers:
   #   SqrlSubmit() (self), SqrlSubScript().
   # User:
@@ -5822,61 +5920,71 @@ SqrlSubmit <- function(datasource,
       && (!SqrlParam(datasource, "errors")
           || ("odbcGetErrMsg" %in% rodbc)))
   {
-    # Append fetch-in-progress marker to the window-title connection indicator.
+    # Append query-in-progress marker to the window-title connection indicator.
     SqrlIndicator(datasource, "query")
 
     # Submit the query, and retrieve the exit code (+1 = success, -1 = failure).
-    status <- base::try(RODBC::odbcQuery(
+    status <- SqrlTry(RODBC::odbcQuery(
                           channel = SqrlParam(datasource, "channel"),
                           query = statement,
-                          rows_at_time = SqrlParam(datasource, "rows_at_time")),
-                        silent = TRUE)
+                          rows_at_time = SqrlParam(datasource, "rows_at_time")))
 
-    # Remove fetch-in-progress marker from the window-title indicator.
+    # Remove query-in-progress marker from the window-title indicator.
     SqrlIndicator(datasource, "done")
 
-    # If the exit-status indicates failure, either try again (if we haven't
-    # already done so), or throw the error (or return the error code).
-    if (status == -1L)
+    # Two modes of failure exist; RODBC::odbcQuery() could throw an error, or
+    # else it could cleanly return its failure code (-1L). Should one occur, we
+    # either try again, throw the error, or return the error message.
+    if (status$error
+        || (status$value == -1L))
     {
-      # If we might need the error message, we'd better retrieve it now, because
-      # SqrlIsOpen() pings the source (below), destroying the message there.
-      if (SqrlParam(datasource, "errors"))
+      # If we might need the ODBC error message, we'd better retrieve it now,
+      # because SqrlIsOpen() pings the source (below), destroying that message.
+      # If RODBC::odbcGetErrMsg() should fail here, we get the error message
+      # for that failure, instead of the original RODBC::odbcQuery() message.
+      if (!status$error
+          && SqrlParam(datasource, "errors"))
       {
-        error <- RODBC::odbcGetErrMsg(SqrlParam(datasource, "channel"))
+        error <- SqrlTry(RODBC::odbcGetErrMsg(SqrlParam(datasource, "channel")))
+        status$value <- base::paste0(error$value, collapse = "\n")
       }
 
-      # If there was en error, but this is a first attempt (retry = TRUE) and a
-      # ping of the source reveals the connection to have been dropped, then we
-      # infer that was the cause of the error, and make one more attempt (only).
-      # That will involve opening a new channel, which might prompt the user for
-      # a password. This mechanism provides a (very) limited ability to recover
-      # from network drop-outs, but it cannot restore temporary tables.
+      # If this was a first attempt (retry = TRUE) and a ping of the source
+      # reveals the connection to have been dropped, then we infer that was the
+      # cause of the error, and make one more attempt (only). That will involve
+      # opening a new channel, which might prompt the user for authentication.
+      # This mechanism provides a (very) limited ability to recover from network
+      # drop-outs, but it cannot restore temporary tables.
       if (retry
           && !SqrlIsOpen(datasource, besure = TRUE))
       {
         base::return(SqrlSubmit(datasource, statement, retry = FALSE))
       }
 
-      # Otherwise, this is already a second attempt; throw or return the error.
-
-      # When the 'errors' parameter is TRUE, promote the error message to a
-      # local R exception, and throw it (RODBC doesn't).
-      if (SqrlParam(datasource, "errors"))
+      # Otherwise, we do not make another attempt. When RODBC::odbcQuery() threw
+      # an error, or when the 'errors' parameter is TRUE, we throw the error. In
+      # the latter case, this has the effect of promoting ODBC failure messages
+      # to local R exceptions (unlike RODBC, which simply returns the messages
+      # as character strings).
+      if (status$error
+          || SqrlParam(datasource, "errors"))
       {
-        base::stop(base::paste(error, collapse = "\n"))
+        base::stop(status$value)
       }
 
-      # Otherwise (when the 'errors' parameter is FALSE), return the error code.
-      base::return(status)
+      # Otherwise (the 'errors' parameter is FALSE), return the error message
+      # (as a character string, without raising an exception).
+      base::return(status$value)
     }
 
+    # The query has succeeded, but we have not yet retrieved the result of it.
     # Append fetch-in-progress marker to the window-title connection indicator.
     SqrlIndicator(datasource, "fetch")
 
     # Retrieve the data. If a connection error occurs here, we cannot easily
-    # recover, since pinging the source would destroy the waiting rows.
-    result <- base::try(
+    # recover without re-submitting the query, since pinging the source will
+    # destroy the waiting rows.
+    result <- SqrlTry(
                 RODBC::sqlGetResults(channel = SqrlParam(datasource, "channel"),
                   as.is = SqrlParam(datasource, "as.is"),
                   errors = SqrlParam(datasource, "errors"),
@@ -5886,41 +5994,48 @@ SqrlSubmit <- function(datasource,
                   na.strings = SqrlParam(datasource, "na.strings"),
                   believeNRows = SqrlParam(datasource, "believeNRows"),
                   dec = SqrlParam(datasource, "dec"),
-                  stringsAsFactors = SqrlParam(datasource, "stringsAsFactors")),
-                silent = TRUE)
+                  stringsAsFactors = SqrlParam(datasource, "stringsAsFactors")))
 
     # Remove fetch-in-progress marker from the window-title indicator.
     SqrlIndicator(datasource, "done")
 
-    # If RODBC::sqlGetResults() appears to have returned an error (message or
-    # code), either try again (in the event of an apparent connection loss, so
-    # long as this is not already a second attempt), or throw the exception (if
-    # the 'errors' parameter is TRUE).
-    if (base::inherits(result, "try-error")
-        || base::identical(base::class(result), base::class(base::integer()))
-        || (base::identical(base::class(result), base::class(base::character()))
-              && (base::length(result) > 1L)))
+    # If RODBC::sqlGetResults() threw an error, or if it appears to have cleanly
+    # returned an error message or code, either try again, throw the exception,
+    # or return the result (potentially an error message or code).
+    if (result$error
+        || base::identical(base::class(result$value),
+                            base::class(base::integer()))
+        || (base::identical(base::class(result$value),
+                            base::class(base::character()))
+              && (base::length(result$value) > 1L)))
     {
       # If the failure appears to have been caused by a lost connection, and
-      # this is our first attempt, then make one more.
+      # this is our first attempt, then make one more. Because SqrlIsOpen() may
+      # have destroyed any waiting rows, the original query must be resubmitted.
       if (retry
           && !SqrlIsOpen(datasource, besure = TRUE))
       {
         base::return(SqrlSubmit(datasource, statement, retry = FALSE))
       }
 
-      # When the 'errors' parameter is TRUE, promote the error message to a
-      # local R exception, and throw it (RODBC doesn't).
-      if (SqrlParam(datasource, "errors"))
+      # If RODBC::sqlGetResults() threw an error, or if the 'errors' parameter
+      # is TRUE, throw the error. In the latter case, this promotes the ODBC
+      # error message to a local R exception, and throws it (RODBC doesn't).
+      if (result$error
+          || SqrlParam(datasource, "errors"))
       {
-        base::stop(base::paste(result, collapse = "\n"))
+        base::stop(base::paste(result$value, collapse = "\n"))
       }
     }
 
     # Return the result. This could be a data frame, a character string, an
     # empty character vector, or an integer code (-1 = failure, -2 = no data).
-    base::return(result)
+    base::return(result$value)
   }
+
+  # The block above is our preferred method, used so long as RODBC::odbcQuery()
+  # remains publicly available. Should that not be the case, the script below
+  # implements our fallback method, which uses RODBC::sqlQuery() instead.
 
   # Append query-in-progress indicator to the window-title connection indicator.
   SqrlIndicator(datasource, "query")
@@ -5928,33 +6043,36 @@ SqrlSubmit <- function(datasource,
   # A valid connection exists. Submit the statement, and retrieve only the first
   # row (the least amount of data we can). Uses stringsAsFactors = FALSE, to
   # simplify merging with any additional rows (discussed below).
-  result <- base::try(
-                    RODBC::sqlQuery(channel = SqrlParam(datasource, "channel"),
-                        query = statement,
-                        errors = SqrlParam(datasource, "errors"),
-                        as.is = SqrlParam(datasource, "as.is"),
-                        max = 1L,
-                        buffsize = SqrlParam(datasource, "buffsize"),
-                        nullstring = SqrlParam(datasource, "nullstring"),
-                        na.strings = SqrlParam(datasource, "na.strings"),
-                        believeNRows = SqrlParam(datasource, "believeNRows"),
-                        dec = SqrlParam(datasource, "dec"),
-                        stringsAsFactors = FALSE,
-                        rows_at_time = SqrlParam(datasource, "rows_at_time")),
-                    silent = TRUE)
+  result <- SqrlTry(RODBC::sqlQuery(channel = SqrlParam(datasource, "channel"),
+                          query = statement,
+                          errors = SqrlParam(datasource, "errors"),
+                          as.is = SqrlParam(datasource, "as.is"),
+                          max = 1L,
+                          buffsize = SqrlParam(datasource, "buffsize"),
+                          nullstring = SqrlParam(datasource, "nullstring"),
+                          na.strings = SqrlParam(datasource, "na.strings"),
+                          believeNRows = SqrlParam(datasource, "believeNRows"),
+                          dec = SqrlParam(datasource, "dec"),
+                          stringsAsFactors = FALSE,
+                          rows_at_time = SqrlParam(datasource, "rows_at_time")))
 
   # Remove query-in-progress indicator from the window title.
   SqrlIndicator(datasource, "done")
 
   # On success, RODBC::sqlQuery() returns a data frame or character string (both
-  # possibly empty). On error, it returns a character vector of error messages
-  # (with at least two elements; being the driver message, plus another from
-  # RODBC), or an integer (either -1, failure, or -2, no data). Refer to the
-  # RODBC manual. First, we look for any kind of error value.
-  if (base::inherits(result, "try-error")
-      || base::identical(base::class(result), base::class(base::integer()))
-      || (base::identical(base::class(result), base::class(base::character()))
-          && (base::length(result) > 1L)))
+  # possibly empty). On an ODBC error, it returns either a character vector, or
+  # an integer (either -1, failure, or -2, no data). Refer to the RODBC manual.
+  # In the character vector error case, the length of the vector is usually at
+  # least two (the ODBC driver error message, plus the RODBC error message), but
+  # in some cases the driver can flag an error without generating a message to
+  # go with it, in which case the result is a single character string, being the
+  # RODBC message (only). All RODBC error messages begin with '[RODBC] ERROR:'.
+  if (result$error
+      || base::identical(base::class(result$value),
+                          base::class(base::integer()))
+      || (base::identical(base::class(result$value),
+                          base::class(base::character()))
+          && base::any(base::grepl("^\\[RODBC\\] ERROR:", result$value))))
   {
     # If the failure appears to have been caused by a lost connection, and this
     # is our first attempt, then make one more.
@@ -5964,13 +6082,18 @@ SqrlSubmit <- function(datasource,
       base::return(SqrlSubmit(datasource, statement, retry = FALSE))
     }
 
-    # When the 'errors' parameter is TRUE, promote error messages to exceptions
-    # (RODBC doesn't), and throw them.
-    if (SqrlParam(datasource, "errors"))
+    # If RODBC::sqlQuery() threw an error, or when the 'errors' parameter is
+    # TRUE, throw the error. In the latter case, this promotes the ODBC error
+    # message or code to an R exception (RODBC doesn't).
+    if (result$error
+        || SqrlParam(datasource, "errors"))
     {
-      base::stop(base::paste(result, collapse = "\n"))
+      base::stop(base::paste(result$value, collapse = "\n"))
     }
   }
+
+  # No error occurred. Remove the error flag, retain only the (non-error) value.
+  result <- result$value
 
   # When the result is not a data frame, there won't be any more rows to fetch.
   # This could be a character string or integer error code.
@@ -6011,7 +6134,7 @@ SqrlSubmit <- function(datasource,
   SqrlIndicator(datasource, "fetch")
 
   # Retrieve all remaining rows (up to any specified maximum limit).
-  restof <- base::try(
+  restof <- SqrlTry(
                 RODBC::sqlGetResults(channel = SqrlParam(datasource, "channel"),
                         as.is = SqrlParam(datasource, "as.is"),
                         errors = SqrlParam(datasource, "errors"),
@@ -6021,8 +6144,7 @@ SqrlSubmit <- function(datasource,
                         na.strings = SqrlParam(datasource, "na.strings"),
                         believeNRows = SqrlParam(datasource, "believeNRows"),
                         dec = SqrlParam(datasource, "dec"),
-                        stringsAsFactors = FALSE),
-                silent = TRUE)
+                        stringsAsFactors = FALSE))
 
   # Remove the fetch-in-progress marker from the window title.
   SqrlIndicator(datasource, "done")
@@ -6030,8 +6152,9 @@ SqrlSubmit <- function(datasource,
   # With the initial call of RODBC::sqlQuery() having returned a non-empty data
   # frame (above), RODBC::sqlGetResults() should also have returned a data frame
   # (although, possibly one with zero rows). Anything else is an error.
-  if (base::inherits(restof, "try-error")
-      || !base::identical(base::class(restof), base::class(base::data.frame())))
+  if (restof$error
+      || !base::identical(base::class(restof$value),
+                          base::class(base::data.frame())))
   {
     # If the failure appears to have been caused by a lost connection, and this
     # is our first attempt, then make one more.
@@ -6041,22 +6164,24 @@ SqrlSubmit <- function(datasource,
       base::return(SqrlSubmit(datasource, statement, retry = FALSE))
     }
 
-    # When the 'errors' parameter is TRUE, promote error messages to exceptions
-    # (RODBC doesn't), and throw them.
-    if (SqrlParam(datasource, "errors"))
+    # If RODBC::sqlGetResults() threw an error, or when the 'errors' parameter
+    # is TRUE, throw the error. The latter case promotes ODBC error messages to
+    # local R exceptions (RODBC doesn't).
+    if (restof$error
+        || SqrlParam(datasource, "errors"))
     {
-      base::stop(base::paste(restof, collapse = "\n"))
+      base::stop(base::paste(restof$value, collapse = "\n"))
     }
 
     # Otherwise (when 'errors' is FALSE), return the unexpected result.
-    base::return(restof)
+    base::return(restof$value)
   }
 
   # Append the subsequent rows (from RODBC::sqlGetResults()) to the initial row
   # (from RODBC::sqlQuery()). It is this operation that requires pulling with
   # stringsAsFactors = FALSE (above), because the two frames need not contain
   # the same factor-level definitions.
-  result <- base::rbind(result, restof)
+  result <- base::rbind(result, restof$value)
 
   # Convert strings to factors, if so instructed.
   if (SqrlParam(datasource, "stringsAsFactors"))
@@ -6094,10 +6219,10 @@ SqrlSubScript <- function(datasource = "",
   #   result (or NULL) is assigned to the intermediate within the environment.
   # SQRL Calls:
   #   SqrlParam(), SqrlSubmit().
-  # SQRL Callers:
-  #   SqrlFile().
   # utils Calls:
   #   head() (only if utils is attached).
+  # SQRL Callers:
+  #   SqrlFile().
   # User:
   #   Has no direct access, but is able to supply (only) the statement, phrase,
   #   and intermediate arguments via a SQRL script. These arguments will have
@@ -6211,6 +6336,50 @@ SqrlSubScript <- function(datasource = "",
   # not this is visible, since NULL is a special value; signifying to SqrlFile()
   # that the current overall result should not be replaced by this one.
   base::return(base::invisible(NULL))
+}
+
+SqrlTry <- function(expr,
+                    warn = TRUE)
+{
+  # Evaluation with silent error catching and optional warning suppression.
+  # Args:
+  #   expr : An arbitrary R expression, to be evaluated.
+  #   warn : When set to FALSE, warning messages are suppressed.
+  # Returns:
+  #   A vector of two named elements; 'error' and 'value'. When evaluation
+  #   produces an error, 'error' will be TRUE and 'value' will be the error
+  #   message. Otherwise (when the expression evaluated normally), 'error' will
+  #   be FALSE and 'value' will be the result of that evaluation.
+  # SQRL Calls:
+  #   None.
+  # SQRL Callers:
+  #   SqrlClose(), SqrlDefile(), SqrlDelegate(), SqrlFile(), SqrlHelp(),
+  #   SqrlIsOpen(), SqrlOff(), SqrlOpen(), SqrlPath(), SqrlPing(), SqrlProc(),
+  #   SqrlShell(), SqrlSource(), SqrlSubmit(), sqrlInterface(), sqrlSource(),
+  #   .onUnload().
+  # User:
+  #   Has no direct access, but can supply the expression indirectly. Here,
+  #   that expression is inherently wrapped in tryCatch(), so no other checks
+  #   are required.
+
+  # Error-handling function.
+  efun <- function(e)
+  {
+    base::list(error = TRUE, value = base::conditionMessage(e))
+  }
+
+  # When warnings are not to be suppressed, attempt to evaluate the expression
+  # while trapping errors but throwing any warning messages.
+  if (warn)
+  {
+    base::return(
+        base::tryCatch(base::list(error = FALSE, value = expr), error = efun))
+  }
+
+  # Otherwise, warnings are to be suppressed. Attempt to evaluate the expression
+  # while trapping errors and also suppressing any warning messages.
+  base::return(base::suppressWarnings(
+      base::tryCatch(base::list(error = FALSE, value = expr), error = efun)))
 }
 
 SqrlValue <- function(datasource = "",
@@ -6448,7 +6617,7 @@ sqrlInterface <- function(...)
   #   set before being returned. When the interface name is given as 'remove',
   #   no new interface is created, but any existing interface is deleted.
   # SQRL Calls:
-  #   SqrlCache(), SqrlDefile(), SqrlInterface(), SqrlParam().
+  #   SqrlCache(), SqrlDefile(), SqrlInterface(), SqrlParam(), SqrlTry().
   # User:
   #   Exported function. User has direct access. The datasource name is checked
   #   for validity, but it is left to SqrlInterface() to establish the validity
@@ -6459,7 +6628,9 @@ sqrlInterface <- function(...)
   if ((base::length(arglist) < 1L)
       || (base::length(arglist) > 2L))
   {
-    base::stop("A source name and an interface name are expected.")
+    k <- base::parse(text = "sqrlInterface(...)", keep.source = FALSE)
+    m <- "A source name and an interface name are expected."
+    base::stop(base::simpleError(m, k[[1L]]))
   }
 
   # Identify the data-source name and also the interface name (if specified).
@@ -6488,7 +6659,9 @@ sqrlInterface <- function(...)
       || (base::nchar(datasource) < 1L)
       || SqrlCache(datasource, exists = FALSE))
   {
-    base::stop("Unrecognised data source.")
+    k <- base::parse(text = "sqrlInterface(...)", keep.source = FALSE)
+    m <- "Unrecognised data source."
+    base::stop(base::simpleError(m, k[[1L]]))
   }
 
   # In the absence of a specified interface name, get and return the name of the
@@ -6498,8 +6671,23 @@ sqrlInterface <- function(...)
     base::return(SqrlParam(datasource, "interface"))
   }
 
-  # Relay the arguments to SqrlInterface() (returns the new name invisibly).
-  base::return(SqrlInterface(datasource, interface))
+  # Relay the arguments to SqrlInterface() (returns the new name).
+  f <- SqrlTry(base::withVisible(SqrlInterface(datasource, interface)))
+
+  # In the event of an error, throw the message.
+  if (f$error)
+  {
+    k <- base::parse(text = "sqrlInterface(...)", keep.source = FALSE)
+    base::stop(base::simpleError(f$value, k[[1L]]))
+  }
+
+  # Return the new interface name, either visibly or invisibly, as appropriate.
+  f <- f$value
+  if (!f$visible)
+  {
+    base::return(base::invisible(f$value))
+  }
+  base::return(f$value)
 }
 
 sqrlOff <- function()
@@ -6527,7 +6715,7 @@ sqrlSource <- function(...)
   #   The interface name, invisibly, after creating, or re-defining, the source
   #   and its interface.
   # SQRL Calls:
-  #   SqrlSource().
+  #   SqrlSource(), SqrlTry().
   # User:
   #   Exported function. User has direct access. Here, we ensure the existence
   #   of name and definition terms (in the form of multiple arguments, or at
@@ -6559,11 +6747,23 @@ sqrlSource <- function(...)
   if ((base::length(def) < 2L)
       && base::is.null(base::names(def)))
   {
-    base::stop("A name and definition are expected.")
+    k <- base::parse(text = "sqrlSource(...)", keep.source = FALSE)
+    m <- "A name and definition are expected."
+    base::stop(base::simpleError(m, k[[1L]]))
   }
 
   # Pass the arguments to SqrlSource() (returns the interface name, invisibly).
-  base::return(SqrlSource(def))
+  s <- SqrlTry(SqrlSource(def))
+
+  # In the event of an error, throw the message.
+  if (s$error)
+  {
+    k <- base::parse(text = "sqrlSource(...)", keep.source = FALSE)
+    base::stop(base::simpleError(s$value, k[[1L]]))
+  }
+
+  # Invisibly return the new interface name.
+  base::return(base::invisible(s$value))
 }
 
 sqrlSources <- function(...)
@@ -6597,7 +6797,9 @@ sqrlSources <- function(...)
     import <- import[[1L]]
   } else
   {
-    base::stop("Argument should be 'all', 'user', 'system', or 'remove'.")
+    k <- base::parse(text = "sqrlSources(...)", keep.source = FALSE)
+    m <- "Argument should be 'all', 'user', 'system', or 'remove'."
+    base::stop(base::simpleError(m, k[[1L]]))
   }
 
   # Pass to SqrlSources(), return the summary.
@@ -6649,15 +6851,15 @@ sqrlSources <- function(...)
   # Returns:
   #   Invisible NULL.
   # SQRL Calls:
-  #   SqrlHelp(), SQRL:Face.
+  #   SqrlHelp(), SqrlTry(), SQRL:Face.
 
   # Remove any SQRL temp files from the R-session temp directory.
-  SqrlHelp(clean = TRUE)
+  SqrlTry(SqrlHelp(clean = TRUE), warn = FALSE)
 
   # Attempt to detach the public SQRL:Face environment, if not already done.
   if ("SQRL:Face" %in% base::search())
   {
-    base::try(base::detach("SQRL:Face"))
+    SqrlTry(base::detach("SQRL:Face"), warn = FALSE)
   }
 
   # Return invisible NULL.
