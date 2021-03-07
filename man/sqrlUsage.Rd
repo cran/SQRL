@@ -77,8 +77,14 @@ owl("select columnA from database.table ",
 # Supplying a query as a list of components.
 owl(list("select ", c("'red'", "'blue'")))
 
+# A parameterised query (SQL with R in it).
+owl("select <R> a + b </R>", a = 0, b = 1)
+
 # Explicit form.
-owl(query = "select 1")
+owl(query = list("select ", "<R>sin(x)</R>"), x = 0)
+
+# Verbatim query.
+owl(verbatim = "select 1 as N")
 
 # Recall the result of the last successful query.
 owl("result")
@@ -96,20 +102,25 @@ This (default) behaviour can be altered with the \var{aCollapse} and
 
 Using the \var{query} keyword overrides the order of precedence (as detailed
 below).
+Whereas \var{query} arguments go through the usual \pkg{SQRL} concatenation,
+parsing, and \R-substitution process, \var{verbatim} arguments are submitted
+directly and without alteration.
+Consequently, the \var{verbatim} command accepts only a single character string,
+which cannot be parameterised via embedded \R.
 
 As \pkg{SQRL} aims to be flexible on input formatting, the above examples can be
 extrapolated.
-For instance, the \var{query} parameter could have been set to a list of
-components (instead of a string).
+For instance, the explicit \var{query} could have been a single string.
 
 When a query returns no data (as would \dQuote{use database}), the interface
 function returns invisibly.
 
-If a query should fail because of an unexpectedly lost connection, an attempt
-will be made to re-connect and re-submit.
+If a query should fail due to an unexpectedly lost connection, one further
+attempt will be made to reconnect and resubmit (provided the \var{retry}
+parameter is \code{TRUE}).
 Unless user input is required for authentication, this should go unnoticed.
-If any temp tables had been in existence, however, then they will have been
-dropped, which may still lead to an error.
+If temp tables were in use, then these will have been dropped along with the
+original connection, and an error may still occur.
 }
 \section{Submitting Queries from File}{
 \preformatted{
@@ -210,9 +221,6 @@ keyword.
 }
 \section{Querying Metadata}{
 \preformatted{
-# Get information on source data types.
-owl("typeinfo")
-
 # List all tables.
 owl("tables")
 
@@ -220,14 +228,21 @@ owl("tables")
 owl("tables", "mydatabase")
 
 # Get information on the columns of a particular table.
-owl("columns", "my.table")
+owl("columns", "mydatabase.table")
+
+# Get information on the primary keys of a particular table.
+owl("primarykeys mydatabase.table")
+
+# Get information on source data types.
+owl("typeinfo")
 }
-The \command{typeinfo}, \command{tables}, and \command{columns} commands are
-simple (reduced functionality) wrappers about
-\code{\link[RODBC:sqlTypeInfo]{RODBC::sqlTypeInfo}},
-\code{\link[RODBC:sqlTables]{RODBC::sqlTables}}, and
-\code{\link[RODBC:sqlColumns]{RODBC::sqlColumns}}, respectively.
-These features are dependent upon the support of your \acronym{DBMS}.
+The \command{tables}, \command{columns}, \command{primarykeys} and
+\command{typeinfo} commands are simple (reduced functionality) wrappers about
+\pkg{RODBC}'s \code{\link[RODBC:sqlTables]{sqlTables}},
+\code{\link[RODBC:sqlColumns]{sqlColumns}},
+\code{\link[RODBC:sqlColumns]{sqlPrimaryKeys}}, and
+\code{\link[RODBC:sqlTypeInfo]{sqlTypeInfo}}, respectively.
+These features are dependent upon the support of your \acronym{DBMS} and driver.
 For some sources, the \var{believeNRows} parameter may need to be \code{FALSE}.
 }
 \section{Reviewing Settings}{
@@ -376,6 +391,9 @@ owl("<R> x * y")
 
 # Explicitly assign x, while inheriting y.
 owl("<R> x * y", x = 2)
+
+# An alternative arrangement of arguments.
+owl(x = 3, query = "<R> x * y", y = 1)
 
 # Write the script to file.
 myfile <- tempfile()

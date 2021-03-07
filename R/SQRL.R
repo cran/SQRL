@@ -306,14 +306,7 @@ SqrlConfig <- function(datasource = "",
       conf[base::trimws(base::names(config)[i])] <- base::list(config[[i]])
     }
 
-    # As when configuring from file (below), ignore any request to set channel.
-    conf <- conf[base::names(conf) != "channel"]
-
-    # Other than the dereferencing of file paths, take the values as they are
-    # (do not attempt to evaluate strings as R).
-    evmode <- FALSE
-
-  # Otherwise, a file path should have been supplied (as a character string).
+  # Otherwise, a file path should have been supplied as a character string.
   } else
   {
     # Abort if that file does not exist.
@@ -323,50 +316,42 @@ SqrlConfig <- function(datasource = "",
       base::stop("File not found.")
     }
 
-    # Read parameter values (to be set) from the config file.
-    for (lyne in base::readLines(filepath, warn = FALSE))
+    # Slurp the file, and parse it as an R script.
+    ftext <- base::readLines(filepath, warn = FALSE)
+    flang <- base::parse(text = ftext, keep.source = FALSE)
+
+    # An environment within which to evaluate the script. Inherits functions
+    # from base, but not variables from the global environment.
+    cfenv <- base::new.env(parent = base::baseenv())
+
+    # Take each expression from the script, wrap it in a list, and evaluate.
+    # Where this results in a named list, interpret the expression as a request
+    # to set a value for the SQRL/RODBC parameter of that name, and add that
+    # name-value pair to the config list. When a name appears within the script
+    # multiple times, only the last value is used.
+    for (expr in flang)
     {
-      # Skip blank lines, and lines beginning with the comment symbol (#).
-      if (!base::grepl("[[:graph:]]", lyne)
-          || base::grepl("^[[:space:]]*#", lyne))
+      etext <- base::paste0(base::deparse(expr), collapse = "\n")
+      lexp <- base::parse(text = base::paste0("list", "(", etext, ")"),
+                          keep.source = FALSE)
+      lval <- base::eval(lexp, cfenv)
+      if ((base::length(lval) == 1L)
+          && !base::is.null(base::names(lval)))
       {
-        next
-      }
-
-      # If the line does not contain '=', do not extract a (name, value) pair.
-      if (!base::grepl("=", lyne))
-      {
-        next
-      }
-
-      # Extract a (parameter-name, value) pair (required format: name = value).
-      pos <- base::regexpr("=", lyne)
-      param <- base::trimws(base::substring(lyne, 1L, pos - 1L))
-      value <- base::trimws(base::substring(lyne, pos + base::nchar("=")))
-
-      # Retain the (name, value) pair, provided the name is not blank, and not
-      # 'channel' (blocks setting/overwriting of this parameter), and the value
-      # is also not blank. When a name appears within the file multiple times,
-      # earlier values are overwritten (only the last occurrence is used).
-      if ((base::nchar(param) > 0L)
-          && (base::nchar(value) > 0L)
-          && (param != "channel"))
-      {
-        conf[[param]] <- value
+        conf[base::names(lval)] <- lval
       }
     }
-
-    # Dereference any file paths, and attempt to evaluate non-path values as R
-    # script (all raw values from file are necessarily strings).
-    evmode <- TRUE
   }
+
+  # Ignore any request to set the channel.
+  conf <- conf[base::names(conf) != "channel"]
 
   # If 'interface' is among the parameters to be set, then set it first (since
   # it's the one most likely to fail). If this does fail, then no further
   # parameter values will be set (SqrlInterface() will throw an exception).
   if ("interface" %in% base::names(conf))
   {
-    value <- SqrlDefile("interface", conf[["interface"]], evaluate = evmode)
+    value <- SqrlDefile("interface", conf[["interface"]])
     SqrlInterface(datasource, value)
     conf["interface"] <- base::list(SqrlValue(datasource, "interface"))
   }
@@ -374,7 +359,7 @@ SqrlConfig <- function(datasource = "",
   # Defining the library is another special case.
   if ("library" %in% base::names(conf))
   {
-    value <- SqrlDefile("library", conf[["library"]], evaluate = evmode)
+    value <- SqrlDefile("library", conf[["library"]])
     if (base::is.null(value))
     {
       SqrlParam(datasource, "reset", "library")
@@ -394,7 +379,7 @@ SqrlConfig <- function(datasource = "",
   params <- base::c(params[params != "driver"], params[params == "driver"])
   for (parameter in params)
   {
-    value <- SqrlDefile(parameter, conf[[parameter]], evaluate = evmode)
+    value <- SqrlDefile(parameter, conf[[parameter]])
     conf[parameter] <- base::list(SqrlValue(datasource, parameter, value))
   }
 
@@ -431,7 +416,9 @@ SqrlDefault <- function(datasource = "",
     "pwd"                 = "",
     "connection"          = "",
     "case"                = "nochange",
-    "believeNRows"        = TRUE,
+    "believeNRows"        = !base::grepl("SQLite",
+                                          SqrlParam(datasource, "driver"),
+                                          ignore.case = TRUE),
     "colQuote"            = base::ifelse(base::grepl("MySQL",
                                                 SqrlParam(datasource, "driver"),
                                                 ignore.case = TRUE),
@@ -452,10 +439,7 @@ SqrlDefault <- function(datasource = "",
     "nullstring"          = NA_character_,
     "na.strings"          = "NA",
     "dec"                 = base::as.character(base::getOption("dec")),
-    "stringsAsFactors"    = base::ifelse(base::R.Version()[["major"]] < "4",
-                                      base::default.stringsAsFactors(), FALSE),
-    # default.stringsAsFactors() throws an error if options() has been used to
-    # set stringsAsFactors to a value that is neither TRUE nor FALSE.
+    "stringsAsFactors"    = FALSE,
 
     # Parameters for SQRL.
     "*"                   = base::objects(cacheenvir, all.names = TRUE),
@@ -471,6 +455,7 @@ SqrlDefault <- function(datasource = "",
     "prompt"              = base::substr(datasource, 1L, 1L),
     "pstack"              = base::list(cacheenvir),
     "result"              = NULL,
+    "retry"               = TRUE,
     "scdo"                = TRUE,
     "verbose"             = FALSE,
     "visible"             = FALSE,
@@ -561,46 +546,49 @@ SqrlDefile <- function(parameter = "",
   }
 
   # Otherwise, the value specifies the path of a readable file. If the parameter
-  # is path-values, then return that path.
+  # is path-valued, then return that path.
   if (parameter %in% SqrlParams("path-valued"))
   {
     base::return(path)
   }
 
-  # Otherwise (the parameter is not path-valued), search the file for the
-  # matching parameter name and value (config format).
-  value <- NA
-  for (lyne in base::readLines(path, warn = FALSE))
+  # Slurp the file.
+  ftxt <- base::readLines(path, warn = FALSE)
+
+  # If the file can't be parsed and evaluated, or if no 'parameter = value'
+  # assignment is found, assume the file text is a literal parameter value.
+  value <- base::trimws(ftxt)
+  value <- value[base::nzchar(value)]
+
+  # Attempt to parse the file as an R script.
+  fexp <- SqrlTry(base::parse(text = ftxt, keep.source = FALSE))
+
+  # If the file parsed, attempt to evaluate its R expressions (within an
+  # environment that inherits functions from base, but not variables from the
+  # global environment, or the evaluation environment of any parent file).
+  if (!fexp$error)
   {
-    # Skip blank lines, and lines beginning with the comment symbol (#).
-    if (!base::grepl("[[:graph:]]", lyne)
-        || base::grepl("^[[:space:]]#", lyne))
+    fenv <- base::new.env(parent = base::baseenv())
+    for (expr in fexp$value)
     {
-      next
-    }
+      etxt <- base::paste0(base::deparse(expr), collapse = "\n")
+      lexp <- base::parse(text = base::paste0("list", "(", etxt, ")"),
+                          keep.source = FALSE)
+      lval <- SqrlTry(base::eval(lexp, fenv))
 
-    # Retain the first non-empty line, for use as a default value when no
-    # explicit (name, value) pair is found for a specified parameter.
-    if (base::is.na(value))
-    {
-      value <- base::trimws(lyne)
-    }
+      # Should an error occur, revert to the default value (literal script).
+      if (lval$error)
+      {
+        value <- base::trimws(ftxt)
+        value <- value[base::nzchar(value)]
+        break
+      }
 
-    # If the line does not contain '=', do not extract a (name, value) pair.
-    if (!base::grepl("=", lyne))
-    {
-      next
-    }
-
-    # Extract a (parameter) (name, value) pair (required format: name = value).
-    pos <- base::regexpr("=", lyne)
-    param <- base::trimws(base::substring(lyne, 1L, pos - 1L))
-
-    # If this is the sought-after parameter, retain the associated value.
-    # Continue searching the file, so that the final matching value is used.
-    if (param == parameter)
-    {
-      value <- base::trimws(base::substring(lyne, pos + base::nchar("=")))
+      # If the expression was of the form 'parameter = value', take that value.
+      if (base::identical(base::names(lval$value), parameter))
+      {
+        value <- lval$value[[1L]]
+      }
     }
   }
 
@@ -608,27 +596,25 @@ SqrlDefile <- function(parameter = "",
   # file path (recursive call, infinite loops are possible). Given that the
   # current value is a file path, we evaluate the next value (since it is to be
   # read from file as text), whether or not the current value was evaluated.
-  base::return(SqrlDefile(parameter, value, evaluate = TRUE))
+  base::return(SqrlDefile(parameter, value))
 }
 
 SqrlDelegate <- function(datasource = "",
                           envir = base::parent.frame(),
-                          args.list,
-                          nested = FALSE)
+                          args.list)
 {
   # Interpret the command, and forward to the appropriate handler.
   # Args:
   #   datasource : The name of a known data source.
   #   envir      : An R environment, from which variables are inherited.
   #   args.list  : A list of arguments, to be interpreted and actioned.
-  #   nested     : Whether or not this call is descended from another.
   # Returns:
   #   The result of the command (normally a data frame, sometimes a string).
   # SQRL Calls:
   #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefile(), SqrlFile(),
   #   SqrlHelp(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(), SqrlOpen(),
   #   SqrlParam(), SqrlParams(), SqrlPath(), SqrlProc(), SqrlSources(),
-  #   SqrlStatement(), SqrlTry(), SqrlValue().
+  #   SqrlStatement(), SqrlSubmit(), SqrlTry(), SqrlValue().
   # RODBC Calls:
   #   sqlColumns(), sqlTables(), sqlTypeInfo().
   # SQRL Callers:
@@ -638,18 +624,6 @@ SqrlDelegate <- function(datasource = "",
   #   argument from sqrlAll() and/or any data source interface (including
   #   intra-script sqrl() functions). Since args.list is unrestricted (it could
   #   be SQL), no argument validity checking is performed.
-
-  # When autoclose is TRUE, always close any open connection upon exiting this
-  # function in any manner (including when an error has been thrown somewhere),
-  # unless this was a nested call (from an intra-script sqrl() function), in
-  # which case closure is deferred until exiting the un-nested ancestor.
-  base::on.exit(
-    if (!nested
-        && SqrlCache(datasource, exists = TRUE)
-        && SqrlParam(datasource, "autoclose"))
-    {
-      SqrlClose(datasource)
-    })
 
   # Count the number of supplied arguments.
   args.count <- base::length(args.list)
@@ -718,6 +692,21 @@ SqrlDelegate <- function(datasource = "",
   if (!base::is.null(args.names)
       && base::all(base::nchar(args.names) > 0L))
   {
+    # When there is only one argument, and it is named 'verbatim', expect a
+    # single character string to be submitted directly (unmodified, without
+    # going through the SQRL concatenator, parser, or R-substitution process).
+    if ((base::length(args.names) == 1L)
+        && (args.names == "verbatim"))
+    {
+      if ((base::length(args.list) != 1L)
+          || (base::class(args.list[[1L]]) != base::class(base::character()))
+          || (base::length(args.list[[1L]]) != 1L))
+      {
+        base::stop("Verbatim query not a single character string.")
+      }
+      base::return(SqrlSubmit(datasource, args.list[[1L]]))
+    }
+
     # Prohibit the use of more than one of the names 'file', 'proc', and
     # 'query', since it is unclear which refers to the script and which is a
     # (are) parameter(s) to the that.
@@ -828,7 +817,7 @@ SqrlDelegate <- function(datasource = "",
       {
         if (param == "interface")
         {
-          value <- SqrlDefile(param, args.list[[index]], evaluate = FALSE)
+          value <- SqrlDefile(param, args.list[[index]])
           result[param] <- base::list(SqrlInterface(datasource, value))
         } else if (param == "library")
         {
@@ -861,7 +850,7 @@ SqrlDelegate <- function(datasource = "",
           result[base::names(values)] <- values
         } else
         {
-          value <- SqrlDefile(param, args.list[[index]], evaluate = FALSE)
+          value <- SqrlDefile(param, args.list[[index]])
           result[param] <- base::list(SqrlValue(datasource, param, value))
         }
       }
@@ -1138,6 +1127,30 @@ SqrlDelegate <- function(datasource = "",
   if ("open" == only.word)
   {
     base::return(SqrlOpen(datasource))
+  }
+
+  # If the first word is 'primarykeys', then call RODBC::sqlPrimaryKeys() on the
+  # remaining words (which ought to be table or database.table).
+  if ("primarykeys" == first.word)
+  {
+    if (first.word == only.word)
+    {
+      base::stop("Table not specified.")
+    }
+    SqrlOpen(datasource)
+    SqrlIndicator(datasource, "query")
+    result <- SqrlTry(RODBC::sqlPrimaryKeys(
+                                  channel = SqrlParam(datasource, "channel"),
+                                  sqtable = other.words,
+                                  errors = SqrlParam(datasource, "errors"),
+                                  as.is = TRUE))
+    SqrlIndicator(datasource, "done")
+    if (result$error
+        && SqrlParam(datasource, "errors"))
+    {
+      base::stop(result$value)
+    }
+    base::return(result$value)
   }
 
   # If the only word is 'remove', then deregister the source from SQRL.
@@ -1544,11 +1557,14 @@ SqrlFile <- function(datasource = "",
     # no devoted (regular) interface (in which case the script must have been
     # passed from sqrlAll()). This function is an intra-script replacement of
     # the regular interface (blocked above). It preserves nesting and makes
-    # scripts interface-name indifferent (i.e., improves portability).
+    # scripts interface-name indifferent (i.e., improves portability). Whereas
+    # regular interfaces call SqrlShell(), this replacement goes directly to
+    # SqrlDelegate(), so that autoclosure only occurs upon exiting the initial
+    # (un-nested) user's command-line call.
     base::assign("sqrl", base::eval(base::parse(text = base::paste0(
                   "function(...) {SqrlDelegate(\"", datasource,
-                  "\", base::parent.frame(), base::list(...), ",
-                  "nested = TRUE)}"), keep.source = FALSE)), sqrl.env)
+                  "\", base::parent.frame(), base::list(...))}"),
+                  keep.source = FALSE)), sqrl.env)
   }
 
   # Assign any supplied parameters to the processing environment. The supplied
@@ -3034,7 +3050,7 @@ SqrlFile <- function(datasource = "",
           w.exp <- base::parse(text = base::paste0("list", "(", w.txt, ")"),
                                 keep.source = FALSE)
 
-          # Evaluate the expression with the with-block sub-environment.
+          # Evaluate the expression within the with-block sub-environment.
           # Errors here are fatal. Warnings are visible.
           w.val <- base::eval(w.exp, w.env)
 
@@ -3436,7 +3452,7 @@ SqrlHelp <- function(datasource = "",
     base::assign("temps", base::c(temps, htmlfile), srqlHelp)
     cssfile <- base::paste0(base::R.home(), "/library/base/html/R.css")
     if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
-                                stylesheet = cssfile)$error))
+                                stylesheet = cssfile))$error)
     {
       base::return(utils::help("sqrlUsage", help_type = "html"))
     }
@@ -3628,11 +3644,19 @@ SqrlIndicator <- function(datasource = "",
     if (do.title)
     {
       indic <- SqrlParam(datasource, "wintitle")
+      glyphed <- base::paste0(indic, glyph)
       if (base::grepl("[[:graph:]]", indic))
       {
-        utils::setWindowTitle(title = base::sub("\\s+$", "",
-                                base::sub(indic, base::paste0(indic, glyph),
-                                      utils::getWindowTitle(), fixed = TRUE)))
+        windowtitle <- utils::getWindowTitle()
+        for (unglyphed in base::paste0(indic, base::c(" ", "*", "+", "?", "")))
+        {
+          if (base::grepl(unglyphed, windowtitle, fixed = TRUE))
+          {
+            utils::setWindowTitle(title = base::sub("\\s+$", "",
+                      base::sub(unglyphed, glyphed, windowtitle, fixed = TRUE)))
+            break
+          }
+        }
       }
     }
     base::return(base::invisible(NULL))
@@ -3646,16 +3670,16 @@ SqrlIndicator <- function(datasource = "",
     if (do.title)
     {
       indic <- SqrlParam(datasource, "wintitle")
+      unglyphed <- base::paste0(indic, " ")
       if (base::grepl("[[:graph:]]", indic))
       {
-        for (glyph in base::c("*", "+", "?"))
+        windowtitle <- utils::getWindowTitle()
+        for (glyphed in base::paste0(indic, base::c("*", "+", "?")))
         {
-          glyphed <- base::paste0(indic, glyph)
-          windowtitle <- utils::getWindowTitle()
           if (base::grepl(glyphed, windowtitle, fixed = TRUE))
           {
             utils::setWindowTitle(title = base::sub("\\s+$", "",
-                        base::sub(glyphed, indic, windowtitle, fixed = TRUE)))
+                      base::sub(glyphed, unglyphed, windowtitle, fixed = TRUE)))
             break
           }
         }
@@ -4889,6 +4913,7 @@ SqrlParams <- function(group = "")
                                       "pwd",
                                       "readOnlyOptimize",
                                       "result",
+                                      "retry",
                                       "rows_at_time",
                                       "scdo",
                                       "stringsAsFactors",
@@ -4907,6 +4932,7 @@ SqrlParams <- function(group = "")
                                       "errors",
                                       "interpretDot",
                                       "readOnlyOptimize",
+                                      "retry",
                                       "scdo",
                                       "stringsAsFactors",
                                       "verbose",
@@ -5456,7 +5482,7 @@ SqrlShell <- function(datasource = "",
   # Returns:
   #   The result of the command (frequently a data frame, string or list).
   # SQRL Calls:
-  #   SqrlDelegate(), SqrlParam(), SqrlTry().
+  #   SqrlCache(), SqrlClose(), SqrlDelegate(), SqrlParam(), SqrlTry().
   # SQRL Callers:
   #   SqrlAll() (and data source interfaces).
   # User:
@@ -5464,6 +5490,15 @@ SqrlShell <- function(datasource = "",
   #   argument from sqrlAll() and/or any data source interface functions). Since
   #   args.list is unrestricted (it could be SQL), no argument validity checking
   #   is performed here.
+
+  # When autoclose is TRUE, always close any open connection upon exiting this
+  # function in any manner (including when an error has been thrown somewhere).
+  base::on.exit(
+    if (SqrlCache(datasource, exists = TRUE)
+        && SqrlParam(datasource, "autoclose"))
+    {
+      SqrlClose(datasource)
+    })
 
   # Relay the arguments to SqrlDelegate, for interpretation and evaluation,
   # while trapping any error that might occur.
@@ -5886,7 +5921,7 @@ SqrlSubmit <- function(datasource,
   # RODBC Calls:
   #   odbcGetErrMsg, odbcQuery, sqlGetResults(), sqlQuery().
   # SQRL Callers:
-  #   SqrlSubmit() (self), SqrlSubScript().
+  #   SqrlDelegate(), SqrlSubmit() (self), SqrlSubScript().
   # User:
   #   Has no direct access. Is able to supply (only) the statement argument (a
   #   string), via SqrlSubScript(). No further checks are required.
@@ -5949,13 +5984,15 @@ SqrlSubmit <- function(datasource,
         status$value <- base::paste0(error$value, collapse = "\n")
       }
 
-      # If this was a first attempt (retry = TRUE) and a ping of the source
+      # If this was a first attempt (retry = TRUE), and second attempts are
+      # enabled (the retry parameter is also TRUE), and a ping of the source
       # reveals the connection to have been dropped, then we infer that was the
       # cause of the error, and make one more attempt (only). That will involve
       # opening a new channel, which might prompt the user for authentication.
       # This mechanism provides a (very) limited ability to recover from network
       # drop-outs, but it cannot restore temporary tables.
       if (retry
+          && SqrlParam(datasource, "retry")
           && !SqrlIsOpen(datasource, besure = TRUE))
       {
         base::return(SqrlSubmit(datasource, statement, retry = FALSE))
@@ -6010,9 +6047,11 @@ SqrlSubmit <- function(datasource,
               && (base::length(result$value) > 1L)))
     {
       # If the failure appears to have been caused by a lost connection, and
-      # this is our first attempt, then make one more. Because SqrlIsOpen() may
-      # have destroyed any waiting rows, the original query must be resubmitted.
+      # this is our first attempt, and the retry parameter is TRUE (enabled),
+      # then make one more. Because SqrlIsOpen() may have destroyed any waiting
+      # rows, the original query must be resubmitted.
       if (retry
+          && SqrlParam(datasource, "retry")
           && !SqrlIsOpen(datasource, besure = TRUE))
       {
         base::return(SqrlSubmit(datasource, statement, retry = FALSE))
@@ -6075,8 +6114,10 @@ SqrlSubmit <- function(datasource,
           && base::any(base::grepl("^\\[RODBC\\] ERROR:", result$value))))
   {
     # If the failure appears to have been caused by a lost connection, and this
-    # is our first attempt, then make one more.
+    # is our first attempt, then make one more (unless the retry parameter has
+    # been set to FALSE).
     if (retry
+        && SqrlParam(datasource, "retry")
         && !SqrlIsOpen(datasource, besure = TRUE))
     {
       base::return(SqrlSubmit(datasource, statement, retry = FALSE))
@@ -6157,8 +6198,10 @@ SqrlSubmit <- function(datasource,
                           base::class(base::data.frame())))
   {
     # If the failure appears to have been caused by a lost connection, and this
-    # is our first attempt, then make one more.
+    # is our first attempt, then make one more (unless the retry parameter has
+    # been set to FALSE).
     if (retry
+        && SqrlParam(datasource, "retry")
         && !SqrlIsOpen(datasource, besure = TRUE))
     {
       base::return(SqrlSubmit(datasource, statement, retry = FALSE))
@@ -6640,8 +6683,7 @@ sqrlInterface <- function(...)
     if (!base::is.null(base::names(arglist)))
     {
       datasource <- base::names(arglist)
-      interface <- SqrlDefile("interface", arglist[[datasource]],
-                              evaluate = FALSE)
+      interface <- SqrlDefile("interface", arglist[[datasource]])
     } else
     {
       datasource <- arglist[[1L]]

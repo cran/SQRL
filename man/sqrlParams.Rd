@@ -55,7 +55,7 @@ Argument to \code{\link[RODBC:odbcConnect]{RODBC::odbcDriverConnect}}.
 Tells \pkg{RODBC} whether or not to trust the nominal number of rows returned by
 the \acronym{ODBC} connection.
 Locked while the connection is open.
-Default value is \code{TRUE}.
+The default value is \code{TRUE}, except for SQLite (\code{FALSE}).
 }
 \item{\var{buffsize}:}{
 A positive integer.
@@ -213,17 +213,13 @@ The default value is \code{NA_character_}.
 }
 \item{\var{ping}:}{
 A character string.
-Defines a simple \acronym{SQL} statement used by \pkg{SQRL} to verify source
-connections.
-This enables \pkg{SQRL} to make one automatic reconnection attempt after a
-network outage or other unexpected channel closure.
+Defines a simple, reliable, \acronym{SQL} statement used by \pkg{SQRL} to verify
+source connections.
 The default value is \acronym{DBMS}-dependent.
 Manual definition may be necessary in the event that \pkg{SQRL} fails to
 identify an appropriate statement for the particular \acronym{DBMS} of the
 source.
 Pings are submitted verbatim, without passing through \pkg{SQRL}'s parser.
-The reconnection process is silent, unless user-input is required for authentication.
-However, temporary tables will not survive the initial connection loss.
 }
 \item{\var{prompt}:}{
 A character string (typically a single character).
@@ -260,6 +256,18 @@ procedure.
 Read-mostly.
 Can be set to \code{NULL} (its default value).
 }
+\item{\var{retry}:}{
+A logical singleton, \code{TRUE} by default.
+Should a query fail due to an apparent network outage or other unexpected loss
+of connection, a \var{ping} (above) is made to verify that occurrence before
+reconnecting and resubmitting the failed query.
+This process is automatic and silent, unless manual input is required for
+authentication.
+However, as any temporary tables will not have survived the initial connection
+loss, a non-existence error may eventually occur.
+Failure of the second attempt is always fatal (no third attempt will be made).
+Changing \var{retry} to \code{FALSE} disables this action.
+}
 \item{\var{rows_at_time}:}{
 A positive integer, between 1 and 1024.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC::odbcDriverConnect}}.
@@ -285,11 +293,8 @@ A logical singleton.
 Argument to \code{\link[RODBC:sqlQuery]{RODBC::sqlQuery}}.
 Controls the conversion of character columns to factor columns within query
 results, excluding those columns covered by \var{as.is}.
-In \R-3, the default value is \code{default.stringsAsFactors()}.
-In \R-4, the default value is \code{FALSE}.
-For simplicity and consistency, it is possible the default value for \R-3 will
-some day change to \code{FALSE}.
-This would differ from the \pkg{RODBC} default on \R-3.
+The default value is \code{FALSE}, for all versions of \R.
+In earlier versions of \pkg{SQRL}, the default was \code{default.stringsAsFactors()} in \R-3, or \code{FALSE} in \R-4.
 }
 \item{\var{tabQuote}:}{
 A character vector of length 0, 1, or 2, or \code{NULL}.

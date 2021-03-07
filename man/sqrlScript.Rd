@@ -77,16 +77,16 @@ script.
 \preformatted{
 <R>
   threshold <- 9000
+  sq <- function(x) paste0("'", x, "'")
 <do> -- This tag terminates the R section.
 
 <R>
   if (!exists("date", inherits = FALSE))
     date <- format(Sys.Date(), "\%Y-\%m-\%d");
-  date <- paste0("'", date, "'")
 ; -- This semicolon terminates the R section.
 
 select * from database.table
-where event_date = <R> date </R>
+where event_date = <R> sq(date) </R>
 and event_size > <R> threshold </R>
 }
 \subsection{Commentary on Script #04}{
@@ -131,8 +131,8 @@ beyond the end of the script.
 This mechanism only works for a limited number of parameters.
 At this time, they are: \var{aCollapse}, \var{as.is}, \var{buffsize},
 \var{dec}, \var{errors}, \var{lCollapse}, \var{max}, \var{na.strings},
-\var{nullstring}, \var{ping}, \var{pwd}, \var{scdo}, \var{stringsAsFactors},
-and \var{verbose}.
+\var{nullstring}, \var{ping}, \var{pwd}, \var{retry}, \var{scdo},
+\var{stringsAsFactors}, and \var{verbose}.
 }
 }
 \section{Script #06 (Procedural Language Blocks)}{

@@ -14,14 +14,14 @@ values.
 \section{Example Configuration File}{
 \preformatted{
 # Parameters for RODBC::odbcConnect/RODBC::odbcDriverConnect.
-dsn                 =
-uid                 = Blake
-pwd                 = C:/some/other/file.txt
-connection          = "driver=<driver>;dbalias=quag;uid=<uid>;pwd=<pwd>;"
+dsn                 = NULL
+uid                 = "Blake"
+pwd                 = 'C:/some/other/file.txt'
+connection          = "driver=<driver>;dbalias=alpha;uid=<uid>;pwd=<pwd>;"
 case                = "nochange"
 believeNRows        = TRUE
 colQuote            = c("`", "'")
-tabQuote            = "
+tabQuote            = '"'
 interpretDot        = TRUE
 DBMSencoding        = ""
 rows_at_time        = 100
@@ -34,20 +34,21 @@ max                 = 0
 buffsize            = 1000
 nullstring          = NA_character_
 na.strings          = c("NA", "-", "")
-dec                 = .
+dec                 = "."
 stringsAsFactors    = FALSE
 
 # Parameters for SQRL.
-aCollapse           = ,
+aCollapse           = ','
 autoclose           = TRUE
 driver              = "{IBM DB2 ODBC DRIVER}"
 interface           = "Z"
 lCollapse           = "\\n"
-library             = my/library/file.sqrl
+library             = "my/library/file.sqrl"
 ping                = "select 1 from dual"
 verbose             = FALSE
 visible             = TRUE
 prompt              = "Z"
+retry               = TRUE
 scdo                = TRUE
 wintitle            = "(Zen)"
 }
@@ -60,25 +61,13 @@ Parameters may be defined as the path to some other file.
 The \var{driver} and \var{dsn} parameters will take that path as their value.
 For all other parameters, a value will be read from within the file.
 Such files may contain only a single line with nothing but the value on it, or
-they may adhere to the full (multiple line) \sQuote{parameter = value}
-\pkg{SQRL} configuration file format (as described here).
-Unexpected results may occur if a file called (say) \dQuote{TRUE} should exist.
+they may adhere to the full (multiple line) \sQuote{parameter = value} format
+(as above).
 
-File paths should not be wrapped in quotes.
-Other strings may be wrapped, although this is not mandatory unless they clash
-with the name of an object within the \R base namespace.
-
-\emph{
-This format is likely to change within the next version or two.
-Specifically, the \R-like rules used between \code{<with>} tags will then apply
-(see example #05 of \code{\link{sqrlScript}}).
-This will make configuration files parsable by \R, but will require quotes
-around all character strings, file paths included.
-}
-
-No action is taken when the right hand side of the equals is blank (as for the
-\var{dsn} parameter, above).
-That is, no assignment is made to the parameter on the left hand side.
+Configuration scripts are parsed and evaluated as \R, but any expressions in
+which the final assignment is made via \code{=} (as opposed to \code{<-}) are
+interpreted as requests to set \pkg{SQRL}/\pkg{RODBC} parameter values, rather
+than \R environment variables.
 }
 \seealso{
 \code{\link{sqrlParams}},
@@ -93,45 +82,61 @@ sqrlSource("Orac",
 # Review its configuration (parameter values).
 Orac("config")
 
-# Create a configuration file.
-my.file <- tempfile()
-writeLines(c("aCollapse = ', '",
-             "as.is = TRUE"),
-           my.file)
+# Create a file, containing only 'TRUE'.
+file1 <- normalizePath(tempfile(), "/", FALSE)
+writeLines("TRUE", file1)
 
-# Import that file.
-Orac(config = my.file)
+# Create a file, containing named parameter values.
+file2 <- normalizePath(tempfile(), "/", FALSE)
+writeLines(c("dsn = 'Aristo'",
+             "uid = 'Ensor'",
+             "autoclose = TRUE",
+             "as.is = FALSE"),
+           file2)
+
+# Create a configuration file, referencing the two above.
+# Observe the use of temporary (non-parameter) variable 'x'.
+file3 <- tempfile()
+writeLines(c("aCollapse = ', '",
+             paste0("verbose = \"", file1, "\""),
+             "x <- 4",
+             "max = sqrt(100 * x)",
+             "as.is = TRUE",
+             paste0("autoclose = '", file2, "'")),
+           file3)
+readLines(file3)
+
+# Configure from the main (third) file.
+Orac(config = file3)
+
+# Alternative file-import forms.
+Orac("config", file3)
+Orac(paste("config", file3))
 
 # Confirm imported values.
-Orac("aCollapse")
-Orac("as.is")
+# Only 'autoclose' has been read from file2.
+Orac("config")
 
-# Alternative forms.
-Orac("config", my.file)
-Orac(paste("config", my.file))
+# Import one parameter value from a file
+# containing only a single unnamed value.
+Orac(readOnlyOptimize = file1)
+Orac("readOnlyOptimize")
 
-# Create a single-line file.
-writeLines("c('NA', 'N-A', 'N/A')",
-           my.file)
-
-# Import that file.
-Orac(na.strings = my.file)
-
-# Confirm the imported value.
-Orac("na.strings")
-
-# Create another configuration file.
-writeLines(c("aCollapse = ,", "as.is = T",
-             "uid = Ensor", "dsn = 'Aristo'"),
-           my.file)
+# Import only a single specific parameter value
+# from a file containing several named values.
+Orac(uid = file2)
+Orac("uid")
 
 # Define and configure a new source from file.
-sqrlSource("Caro", my.file)
-
-# Confirm source creation.
+sqrlSource("Caro", file2)
 Caro("config")
 
-# Delete the file.
-unlink(my.file)
+# Configuration can also be performed from a named list,
+# which could be generated by any R function or script.
+Caro(config = list(autoclose = FALSE, max = 100))
+Caro("config")[c("autoclose", "max")]
+
+# Delete files.
+unlink(c(file1, file2, file3))
 }
 \keyword{file}
