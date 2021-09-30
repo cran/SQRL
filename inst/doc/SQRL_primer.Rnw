@@ -1,0 +1,542 @@
+\documentclass[a4paper]{article}
+
+%\usepackage{Sweave}
+%\VignetteIndexEntry{SQRL Features and Usage}
+%\VignetteKeywords{databases}
+%\VignetteKeywords{ODBC}
+%\VignettePackage{SQRL}
+
+\usepackage{color}
+\definecolor{comment}{rgb}{0.0, 0.6, 0.3}
+\definecolor{keyword}{rgb}{0.0, 0.0, 1.0}
+\definecolor{routput}{rgb}{0.0, 0.0, 1.0}
+\definecolor{rprompt}{rgb}{1.0, 0.0, 0.0}
+\definecolor{rscript}{rgb}{1.0, 0.0, 0.0}
+\definecolor{sqlbase}{rgb}{0.0, 0.4, 0.8}
+\definecolor{sqrltag}{rgb}{0.6, 0.0, 0.6}
+\definecolor{linenum}{rgb}{0.5, 0.5, 0.5}
+\definecolor{windowt}{rgb}{0.0, 0.0, 1.0}
+
+\newcounter{lineno}
+\newcommand{\fl}{\refstepcounter{lineno}
+  \makebox[18pt][r]{\textcolor{linenum}{\thelineno}}\qquad}
+
+\usepackage{alltt}
+\newenvironment{shell}{\begin{alltt}\small\color{rprompt}}{\end{alltt}}
+\newenvironment{file}{\setcounter{lineno}{0}\begin{alltt}\small}{\end{alltt}}
+
+\newcommand{\tab}{\ \ }
+\newcommand{\cmd}[1]{\texttt{#1}}
+\newcommand{\com}[1]{\textit{\textcolor{comment}{#1}}}
+\newcommand{\key}[1]{\textcolor{keyword}{#1}}
+\newcommand{\out}[1]{\textcolor{routput}{#1}}
+\newcommand{\rin}[1]{\textcolor{rscript}{#1}}
+\newcommand{\sql}[1]{\textcolor{sqlbase}{#1}}
+\newcommand{\tag}[1]{\textcolor{sqrltag}{#1}}
+\newcommand{\win}[1]{\textcolor{windowt}{#1}}
+
+\title{SQRL Features and Usage}
+\author{Mike Lee}
+
+\begin{document}
+\maketitle
+\noindent
+Whatever your nominal role, if it comes with access to an organisation's
+database, then the occasional explore-pull-summarise request is almost
+inevitable.
+The aim of SQRL is to turn those around as quickly as possible, letting you
+get back to serious thinking.
+
+SQRL handles (RODBC) communications in the background; silently opening
+connections and applying preferences, without bothering the user.
+If you've been handed a multi-statement SQL script, SQRL can run that original
+file.
+Blocks of R can be added to the same script; in order to parameterise a query,
+or transform the resulting data.
+SQRL also provides means for living with DBMS limitations, administrator's
+restrictions, and unreliable networks.
+
+
+\section{Quick Start}
+Upon loading, SQRL generates a dedicated interface function to each ODBC DSN
+found on your system.
+Supposing one of those DSNs is called `arx', it could then be queried like so;
+\begin{shell}
+> library(SQRL)
+> arx("use database; select * from table")
+\end{shell}
+
+Arguments fed to \cmd{arx(...)} are parsed and interpreted.
+In the example above, the single argument looks like a pair of SQL statements.
+That being the case, a connection is opened, the first statement is submitted,
+then the second, and the result of that query returned.
+The connection is left open for reuse.
+All communications with the ODBC drivers are made through calls to RODBC
+functions.
+
+There is a computational overhead to the parsing, of course, but it is
+negligible in comparison to the time it takes to process a query.
+In return, less time, effort, and typing is required from the user.
+For instance, if `query.sql' should happen to be the path of a readable file,
+then
+\begin{shell}
+> arx("query.sql")
+\end{shell}
+submits the statements appearing within it.
+By and large, SQRL attempts to be flexible; supporting different and minimalist
+styles of input, and deducing what you mean it to do.
+For the order of precedence, see
+\begin{shell}
+> help(sqrlUsage)
+\end{shell}
+
+
+% The \newpage is to avoid page breaks within sections. Using this rather than
+% the usual \vbox (or similar), because \newpage is proving more consistent
+% under a change of paper size between A4 and US Letter.
+\newpage
+\section{Multi-Statement Scripts}
+If this
+\begin{file}
+\fl\com{/* This script has three statements. */}
+\fl\key{use} \sql{database;}
+\fl\key{insert into} \sql{table1}
+\fl\tab\key{select} \sql{*} \key{from} \sql{table2};
+\fl\key{drop table} \sql{table2;}
+\end{file}
+is the content of file `sequence.sql', then
+\begin{shell}
+> arx("sequence.sql")
+\end{shell}
+submits each statement in turn, and returns the result of the final operation.
+This is convenient when you've inherited a script prepared in a SQL IDE.
+
+While the parser does handle basic procedural language (PL), it may sometimes
+trip over more esoteric DBMS-specific extensions.
+Should that occur, the manual details a robust-parsing fallback mode (requiring
+tweaks to the original script), and an unparsed verbatim alternative (for single
+statements, only).
+
+{\ }\\
+\section{Parameterisaton of Queries}
+SQRL's parser supports a hybrid syntax wherein arbitrary blocks of R can be
+embedded within SQL script.
+Special tags mark the beginning and end of any such R inclusions, in much the
+same way as Sweave isolates R within LaTeX.
+Here is a listing of one such script;
+\begin{file}
+\fl\com{-- SQL with R in it.}
+\fl\key{select} \sql{*} \key{from} \sql{database.table}
+\fl\key{where} \sql{column >} \tag{<R>} \rin{pnorm(x)} \tag{</R>}
+\end{file}
+If this is the content of a file `query.sqrl', then it could be submitted like so;
+\begin{shell}
+> arx("query.sqrl", x = 3)
+\end{shell}
+
+While hybrid scripts are parameterised at the user's end, the data source
+receives only standard unparameterised SQL; after all R blocks have been
+replaced by the results of their evaluation.
+This provides an alternative to constructing queries from collections of strings
+and variables pasted together within the body of an R script, and allows your
+text editor to apply SQL syntax highlighting rules to predominantly SQL scripts.
+It is also useful when you don't have the permissions to create parameterised
+queries, macros, or functions on the database server itself.
+
+An extended discussion of the hybrid syntax, with examples, is provided in the
+reference manual and help system;
+\begin{shell}
+> help(sqrlScript)
+\end{shell}
+
+
+\newpage
+\section{Integrated Post-Processing}
+For any number of reasons,  SQL-queried data is frequently cleansed, converted,
+or otherwise transformed in R, prior to reaching its destination as input to a
+model or analysis.
+SQRL's parser allows any such processing to be tacked onto the end of a SQL
+script;
+\begin{file}
+\fl\com{/* A SQL query followed by R post-processing. */}
+\fl\key{select} \sql{A, B, C} \key{from} \sql{table}
+\fl
+\fl\com{-- Submit the query, assign its result to 'x', and switch to R.}
+\fl\tag{<result -> x>}
+\fl
+\fl\com{# Manipulate the result in R.}
+\fl\rin{x$A <- as.factor(x$A)}
+\fl\rin{x$B <- as.Date(x$B, "%d/%m/%Y")}
+\fl\rin{x$C <- (x$C - mean(x$C)) / sd(x$C)}
+\fl\rin{x} \com{-- Only this final value is returned.}
+\end{file}
+If this is in file `pull.sqrl', then;
+\begin{shell}
+> arx("pull.sqrl")
+\end{shell}
+returns the data already cleaned and formatted.
+This helps separate data-preparation script from data-analysis script.
+Alternatively, simple analyses can be placed entirely within the post-processing
+section.
+
+
+\section{Set and Forget Communications}
+\label{parameters}
+Whether opening a connection, submitting a query, or fetching results,
+communicating with ODBC drivers involves passing the values of several control
+parameters every time.
+Since this might be bothersome when one or more of those values is non-default,
+SQRL keeps a record of the settings for each data source, and applies them
+behind the scenes.
+For example,
+\begin{shell}
+> arx(believeNRows = FALSE, dec = ",")
+\end{shell}
+sets new values for two of the parameters.
+All subsequent queries to that source,
+\begin{shell}
+> arx("select * from table")
+\end{shell}
+for instance, inherit those values.
+Any other sources use their own values.
+
+Some communications settings cannot be changed while the connection to the data
+source is open.
+Their values are applied at the time of opening, rather than with each query,
+and so can only be altered beforehand.
+
+Some features of SQRL work best when opening a new connection does not involve
+manual authentication.
+Usernames and passwords can be stored for automatic use on data sources where
+the user would otherwise be prompted for input.
+Passwords are held with a very modest level of security.
+
+For a complete list of control parameters, see
+\begin{shell}
+> help(sqrlParams)
+\end{shell}
+
+
+\newpage
+\section{Protected Connection Handles}
+SQRL interface functions, communications settings, and connection handles are
+stored outside of the global environment.
+That being the case,
+\begin{shell}
+> rm(list = ls(all = TRUE))
+\end{shell}
+is fine; settings are preserved, connections remain open, temp tables persist,
+and you shouldn't see any warnings about the closing of unused handles.
+
+
+\section{Automatic Connection Closure}
+By default, connections remain open after use.
+To manually close one, use
+\begin{shell}
+> arx("close")
+\end{shell}
+This is allowed even when the connection is not open (is already closed).
+A new connection will be opened the next time a query is submitted.
+Communications settings can be changed in the meanwhile.
+
+To have the connection close automatically after each sequence of operations,
+set
+\begin{shell}
+> arx(autoclose = TRUE)
+\end{shell}
+With that done,
+\begin{shell}
+> arx("use database; select * from table")
+\end{shell}
+opens a connection, submits the first statement, then the query, closes the
+connection, and returns the result of the query.
+This can be courteous when your administrator has set a short timeout.
+
+
+\section{Recovery from Lost Connections}
+If a query should happen to fail, and that failure appears to have been caused
+by an unexpectedly dropped connection, then a single attempt will be made to
+reconnect and resubmit.
+This occurs automatically, and will usually go unnoticed (unless manual input is
+required for authentication, see section \ref{parameters}).
+This can be helpful when working over an unreliable network, or when your
+administrator has set a short timeout.
+
+Suspect connections are tested with a simple and trusted `ping' query.
+This is automatically determined the first time a connection is opened.
+It can be manually redefined if that initial value proves unsatisfactory;
+\begin{shell}
+> arx(ping = "begin null; end;")
+\end{shell}
+
+Note that any temp tables will not have survived the initial connection loss.
+Even though a connection is reestablished, the query will subsequently fail if
+it uses one of those temps.
+Automatic recovery attempts can be disabled with
+\begin{shell}
+> arx(retry = FALSE)
+\end{shell}
+
+
+\newpage
+\section{Local Exceptions from Remote Failures}
+When a query fails in an unrecoverable way, the corresponding driver and RODBC
+messages are raised to an error (instead of being returned as a normal
+character vector).
+Consequently, exceptions on the remote server immediately halt local execution
+in R.
+This stops the script at the point of failure, before knock-on effects cause
+other, potentially cryptic, problems.
+
+To disable this behaviour, and revert to character notifications, use
+\begin{shell}
+> arx(errors = FALSE)
+\end{shell}
+
+
+\section{Visible Connection Status}
+For a continuous display of connection status, use
+\begin{shell}
+> arx(visible = TRUE)
+\end{shell}
+This authorises changes to R's global `prompt' option.
+If a connection to arx is open, the prompt should now read
+\begin{shell}
+a>
+\end{shell}
+This can be of use when juggling multiple sources.
+If we have three, `arx', `box' and `crate', we can make them all visible with
+\begin{shell}
+> sqrlAll(visible = TRUE)
+\end{shell}
+If the prompt then reads
+\begin{shell}
+ac>
+\end{shell}
+we can see that arx and crate and are open, while box is closed.
+
+On Windows (only), in R.exe, Rterm.exe, or Rgui.exe (MDI or SDI, but not in
+RStudio), the window title also changes.
+While a connection is open, it might read something like
+\begin{shell}
+\win{R Console (64-bit) (arx)}
+\end{shell}
+While a query is running, this becomes
+\begin{shell}
+\win{R Console (64-bit) (arx)*}
+\end{shell}
+and while results are being fetched,
+\begin{shell}
+\win{R Console (64-bit) (arx)+}
+\end{shell}
+This distinguishes server query time from network data transfer time, and is
+potentially helpful in diagnosing a bottleneck.
+
+To change the prompt and title indicators, use
+\begin{shell}
+> arx(prompt = "A", wintitle = "[ARX]")
+\end{shell}
+
+
+\newpage
+\section{Result Retention}
+If you've just done this;
+\begin{shell}
+> arx("my_long_query.sql")
+\end{shell}
+and forgot to assign the output, fear not.
+The result of the last successful job is stored as
+\begin{shell}
+> arx("result")
+\end{shell}
+
+When memory is low, the stored result can be deleted with
+\begin{shell}
+> arx(result = NULL)
+\end{shell}
+
+
+\section{Automatic Concatenation}
+Queries and file paths may be expressed as components.
+These are automatically pasted into a single character string.
+By default, list elements are collapsed together with empty strings, while
+atomic vectors are collapsed with commas.
+For example, if we define two atomic vectors;
+\begin{shell}
+> a <- c("columnA", "columnB")
+> b <- c(1, 2, 3)
+\end{shell}
+then
+\begin{shell}
+> arx("select ", a, " from table",
++ " where columnC in (", b, ");")
+\end{shell}
+results in
+\begin{shell}
+\out{"select columnA,columnB from table where columnC in (1,2,3);"}
+\end{shell}
+being submitted to the data source.
+
+Note that if \cmd{b} were a character vector, it might still be necessary to put
+single quotes about each of its elements;
+\begin{shell}
+> sq <- function(x) paste0("'", x, "'")
+> arx("select * from table where column in (", sq(b), ")")
+\end{shell}
+This is difficult to automate, because the elements might already be quoted, or
+quotes might not be wanted.
+The latter occurs when the vector specifies, say, column names (as is the case
+with \cmd{a}, above), or when it holds character representations of long
+integers.
+
+The collapsing rules can be changed by
+{\small\color{rprompt}\begin{verbatim}
+> arx(aCollapse = ", ", lCollapse = "\n")
+\end{verbatim}}
+% The above is not the usual 'shell' (alltt) LaTeX environment, because alltt
+% lacks the backslash symbol in pdfLaTeX. \texttt is not used, because the
+% vertical environment padding would not be applied.
+
+
+\newpage
+\section{A Longer Script, using Feedback}
+This script;
+\begin{file}
+\fl\com{-- Use these communications settings.}
+\fl\tag{<with>}
+\fl\tab\rin{as.is = TRUE}
+\fl\tag{</with>}
+\fl
+\fl\com{-- Define an R function, for later use.}
+\fl\tag{<R>}
+\fl\tab\rin{asdate <- function(d) \{format(d, "'%Y-%m-%d'")\}}
+\fl\tag{<do>}
+\fl
+\fl\com{-- A parameterised SQL query (template).}
+\fl\key{select} \sql{columnA} \key{from} \sql{table1}
+\fl\tab\key{where} \sql{columnB = }\tag{<R>} \rin{asdate(date)} \tag{</R>}
+\fl
+\fl\com{-- Submit the above query, assign its result to 'x',}
+\fl\com{-- and transform that data in R.}
+\fl\tag{<result -> x>}
+\fl\tab\rin{x <- unique(x$columnA %/% 10000)}
+\fl\tag{<do>}
+\fl
+\fl\com{-- Submit another query, incorporating the}
+\fl\com{-- (transformed) intermediate results.}
+\fl\key{select} \sql{*} \key{from} \sql{table2}
+\fl\tab\key{where} \sql{columnC in (}\tag{<R>} \rin{x} \tag{</R>}\sql{)}
+\end{file}
+in file `script.sqrl', could be run with
+\begin{shell}
+> arx("script.sqrl", date = Sys.Date() - 1)
+\end{shell}
+
+The first section, lines 1 through 4, forces the script to run with the
+specified communications settings.
+Original settings will be restored afterwards.
+The second section, lines 6 through 9, evaluates R script into a temporary
+working environment.
+The global environment is unaffected.
+The third section, lines 11 through 19, constructs a query from an argument,
+\cmd{date}, assigns the result of the query to \cmd{x} (in the temporary
+environment), and manipulates that result.
+The final section, lines 21 through 24, constructs a second query from the
+(transformed) intermediate result, and returns the result of that query.
+
+This example is simple enough it could have been done with a join, but
+circumstances might be that the intermediate data manipulation is too complex
+for SQL, or involves more data from R, or from another data source, or you
+don't have enough server memory quota, or permissions for a temp table, or can't
+nest queries, or can't upload data, or want to reduce load on the server (at the
+expense of increased network traffic), or are fighting an unfamiliar DBMS, or
+some other administrative restriction.
+More advanced features of the hybrid syntax allow for conditional submissions,
+loops, early returns, and stored procedures.
+\begin{shell}
+> help(sqrlScript)
+\end{shell}
+
+
+\newpage
+\section{Verbose Mode}
+For debugging, verbose mode is enabled by
+\begin{shell}
+> arx(verbose = TRUE)
+\end{shell}
+
+
+\section{Data Sources}
+To see what sources are available, call
+\begin{shell}
+> sqrlSources()
+\end{shell}
+
+New sources can be defined by specifying a DSN, or connection string, or from a
+configuration file containing the string and communications settings;
+\begin{shell}
+> sqrlSource(foo = "config.txt")
+\end{shell}
+Detailed examples are provided in the manual;
+\begin{shell}
+> help(sqrlSource)
+> help(sqrlConfig)
+\end{shell}
+
+
+\section{Help}
+Being user and system dependent, the names of the interface functions, like
+\texttt{arx}, are unknown at package build time.
+Consequently, they do not appear within the SQRL reference manual or the
+standard R help system.
+For examples of general usage, try
+\begin{shell}
+> help(sqrlUsage)
+\end{shell}
+Alternatively,
+\begin{shell}
+> arx("help")
+\end{shell}
+provides a smaller set of examples, along with configuration details specific to
+interface \texttt{arx}.
+
+For a list of all communications settings, use
+\begin{shell}
+> arx("config")
+\end{shell}
+and for one specific setting,
+\begin{shell}
+> arx("believeNRows")
+\end{shell}
+(for instance).
+
+For the current connection status (open or closed), try
+\begin{shell}
+> arx("is open")
+\end{shell}
+This may ping the source for confirmation.
+The space is optional.
+
+
+\newpage
+\section{Ending Sessions}
+To close the connection to data source `arx', use
+\begin{shell}
+arx("close")
+\end{shell}
+To close the connections to all SQRL data sources, use
+\begin{shell}
+sqrlAll("close")
+\end{shell}
+
+To close the connections to all SQRL data sources, remove their interface
+functions, and unload the SQRL library, use
+\begin{shell}
+sqrlOff()
+\end{shell}
+After this, no further communication is possible with any data source (via SQRL,
+until it is reloaded).
+
+
+\end{document}
+% EOF

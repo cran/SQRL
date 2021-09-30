@@ -21,12 +21,7 @@ the addition of flow-control structures within and around \acronym{SQL}, and the
 use of libraries of stored scripts.
 Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-
-This is version 0.8.0.
-The default value of \var{stringsAsFactors} is now \code{FALSE}, for all
-versions of \R (see \code{\link{sqrlParams}}).
-For SQLite data sources (only), the default value of \var{believeNRows} is now \code{FALSE} (see \code{\link{sqrlParams}}).
-Configuration files now use \R syntax (see \code{\link{sqrlConfig}}).
+This is version 1.0.0.
 }
 \author{
 Mike Lee

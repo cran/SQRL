@@ -21,7 +21,6 @@ When an atomic object (typically a vector of character or integer type) is
 pasted into \acronym{SQL}, that object is first collapsed to a single string,
 with \var{aCollapse} separating each sequential pair of the object's elements.
 The default value is comma (\dQuote{,}).
-Early versions of \pkg{SQRL} used newline (\dQuote{\\n}).
 }
 \item{\var{as.is}:}{
 A logical vector, or a numeric vector (of column indices), or a  character
@@ -37,7 +36,7 @@ That being the case, it is often best defined as a logical singleton (either
 \code{TRUE} or \code{FALSE}).
 Alternatively, temporary query-specific values can be set within \acronym{SQRL}
 scripts (see \code{\link{sqrlSource}}).
-Default value is \code{FALSE} (convert all character columns).
+The default value is \code{FALSE} (convert all character columns).
 }
 \item{\var{autoclose}:}{
 A logical singleton.
@@ -61,7 +60,7 @@ The default value is \code{TRUE}, except for SQLite (\code{FALSE}).
 A positive integer.
 Argument to \code{\link[RODBC:sqlQuery]{RODBC::sqlQuery}}.
 Specifies the number of rows (of a query result) to fetch at a time.
-Default value is 1000.
+The default value is 1000.
 }
 \item{\var{case}:}{
 A character string, specifically one of \dQuote{nochange}, \dQuote{toupper},
@@ -69,7 +68,7 @@ A character string, specifically one of \dQuote{nochange}, \dQuote{toupper},
 Argument to \code{\link[RODBC:odbcConnect]{RODBC::odbcDriverConnect}}.
 Specifies case-changing behaviour for table and column names.
 Locked while the connection is open.
-Default value is \dQuote{nochange}.
+The default value is \dQuote{nochange}.
 }
 \item{\var{channel}:}{
 An \pkg{RODBC} connection handle.
@@ -110,7 +109,7 @@ A character string.
 Argument to \code{\link[RODBC:odbcConnect]{RODBC::odbcDriverConnect}}.
 Names the encoding returned by the \acronym{DBMS}.
 Locked while the connection is open.
-Default value is the empty string (use encoding of the \R locale).
+Defaults to the empty string (use encoding of the \R locale).
 Will accept \code{NULL} as an alias for the empty string.
 }
 \item{\var{dec}:}{
@@ -148,14 +147,14 @@ A logical singleton.
 Argument to \code{\link[RODBC:sqlQuery]{RODBC::sqlQuery}}.
 Controls whether or not to throw \R errors in response to
 \acronym{DBMS}/\acronym{ODBC} exceptions.
-Default value is \code{TRUE} (this differs from the \pkg{RODBC} default).
+The default value is \code{TRUE} (this differs from the \pkg{RODBC} default).
 }
 \item{\var{interface}:}{
 A character string, or \code{NULL}.
 The name of the \pkg{SQRL} interface function for this data source (see
 \code{\link{sqrlInterface}}).
 Setting \code{NULL} or \dQuote{remove} removes the interface.
-Default value is \code{NULL} (undefined).
+The default value is \code{NULL} (undefined).
 }
 \item{\var{interpretDot}:}{
 A logical singleton.
@@ -172,7 +171,6 @@ that object is first collapsed to a single string, with \var{lCollapse}
 separating each sequential pair of the object's elements (to each of which,
 \var{aCollapse} will have first been applied).
 The default value is the empty string (\dQuote{}).
-Early versions of \pkg{SQRL} used a comma followed by a space (\dQuote{, }).
 }
 \item{\var{library}:}{
 A character vector.
@@ -213,12 +211,16 @@ The default value is \code{NA_character_}.
 }
 \item{\var{ping}:}{
 A character string.
-Defines a simple, reliable, \acronym{SQL} statement used by \pkg{SQRL} to verify
-source connections.
-The default value is \acronym{DBMS}-dependent.
+Defines a reliable, trusted, \acronym{SQL} statement, used by \pkg{SQRL} to
+verify source connections.
+The initial value is \code{NULL}, which causes a simple,
+\acronym{DBMS}-dependent, statement to be determined the first time a connection
+is opened.
 Manual definition may be necessary in the event that \pkg{SQRL} fails to
 identify an appropriate statement for the particular \acronym{DBMS} of the
 source.
+Manually setting \code{NULL} causes the statement to be redetermined the next
+time a connection is opened.
 Pings are submitted verbatim, without passing through \pkg{SQRL}'s parser.
 }
 \item{\var{prompt}:}{
@@ -248,13 +250,13 @@ Argument to \code{\link[RODBC:odbcConnect]{RODBC::odbcDriverConnect}}.
 Specifies whether or not to optimise the \acronym{ODBC} connection for read-only
 access.
 Locked while the connection is open.
-Default value is \code{FALSE}.
+The default value is \code{FALSE}.
 }
 \item{\var{result}:}{
 An arbitrary object, being the final outcome of the last successful query or
 procedure.
 Read-mostly.
-Can be set to \code{NULL} (its default value).
+Can be set to \code{NULL} (its default value), to free memory.
 }
 \item{\var{retry}:}{
 A logical singleton, \code{TRUE} by default.
@@ -293,8 +295,7 @@ A logical singleton.
 Argument to \code{\link[RODBC:sqlQuery]{RODBC::sqlQuery}}.
 Controls the conversion of character columns to factor columns within query
 results, excluding those columns covered by \var{as.is}.
-The default value is \code{FALSE}, for all versions of \R.
-In earlier versions of \pkg{SQRL}, the default was \code{default.stringsAsFactors()} in \R-3, or \code{FALSE} in \R-4.
+The default value is \code{FALSE}.
 }
 \item{\var{tabQuote}:}{
 A character vector of length 0, 1, or 2, or \code{NULL}.
@@ -322,7 +323,7 @@ May be inaccurate when the \acronym{UID} is specified within a \acronym{DSN}.
 A logical singleton.
 Controls whether or not to display verbose output during query submission.
 Intended mainly for debugging.
-The default is \code{FALSE} (verbose output disabled).
+The default value is \code{FALSE} (verbose output disabled).
 }
 \item{\var{visible}:}{
 A logical singleton.

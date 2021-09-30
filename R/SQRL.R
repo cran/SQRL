@@ -1023,9 +1023,7 @@ SqrlDelegate <- function(datasource = "",
   } else
   {
     only.word <- ""
-    other.words <- base::paste(
-                              args.list[base::seq(2L, base::length(args.list))],
-                              collapse = "")
+    other.words <- base::paste(args.list[-1L], collapse = "")
   }
 
   # If the only word is 'close', close the data source channel.
@@ -2264,7 +2262,7 @@ SqrlFile <- function(datasource = "",
           && cond.current)
       {
         i <- loop.points[base::length(loop.points)]
-        loop.points <- loop.points[base::seq(base::length(loop.points) - 1L)]
+        loop.points <- loop.points[-base::length(loop.points)]
         k <- pos[i]
 
       # Otherwise, we've reached an else, the end of a (TRUE OR FALSE) if block,
@@ -2305,14 +2303,14 @@ SqrlFile <- function(datasource = "",
       } else
       {
         cond.current <- cond.stack[base::length(cond.stack)]
-        cond.stack <- cond.stack[base::seq(1L, base::length(cond.stack) - 1L)]
+        cond.stack <- cond.stack[-base::length(cond.stack)]
       }
 
       # In the case of ending an if, remove the current (last) entry from the
       # else stack (all alternatives having been exhausted).
       if (pat.type == "tag.endif")
       {
-        else.stack <- else.stack[base::seq(base::length(else.stack) - 1L)]
+        else.stack <- else.stack[-base::length(else.stack)]
       }
     }
 

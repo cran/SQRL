@@ -100,14 +100,14 @@ Such sections are evaluated in the same way as those ending in \code{</R>} tags,
 but the results are not pasted into \acronym{SQL}.
 These sections can only appear between, not within, \acronym{SQL} statements.
 
-In this script, the first out-of-\acronym{SQL} \R section is used to define a
-numerical constant.
+In this script, the first out-of-\acronym{SQL} \R section defines a numerical
+constant, and also a function for wrapping strings in single quotes.
 The second out-of-\acronym{SQL} \R section supplies a default value for a
-variable, \var{date}, if no value was explicitly passed in (see
+variable, \var{date}, if none was explicitly passed in (see
 \code{\link{sqrlUsage}}).
-It then wraps the character representation of \var{date} in single quotes (to
-make it \acronym{SQL}-friendly).
 These two \R sections could be combined into one.
+The function and values from these sections are applied in the subsequent
+\acronym{SQL}.
 }
 }
 \section{Script #05 (Temporary Parameter Settings)}{

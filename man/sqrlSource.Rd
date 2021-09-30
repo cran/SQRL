@@ -58,8 +58,6 @@ Alternatively, redefining a source to \code{NULL} also deregisters the source.
 }
 \value{
 An invisible list of the new source's parameter values.
-This is a change from previous versions of \pkg{SQRL}, wherein only the name of
-the source's interface function was returned.
 }
 \note{
 Source definitions are not checked for validity (specified connection strings
@@ -145,8 +143,18 @@ sqrlSource(sf = list(driver = "{SnowflakeDSIIDriver}",
                      server = "xyz.eu-central-1.snowflakecomputing.com",
                      uid = "me", pwd = "guess", port = 443))
 
-# Create a configuration file.
+# Create a configuration file, and define a new source, 'sage',
+# from it. Compare with the very first example, and with the 'mydb'
+# example (both above). Once prepared, using a file is simple.
 config.file <- tempfile()
+writeLines(c("connection = c(driver   = 'SQLite3 ODBC Driver',",
+             "               database = 'D:/mydb.db')",
+             "autoclose = TRUE; believeNRows = TRUE"),
+           config.file)
+sqrlSource(sage = config.file)
+
+# Create a (partial) configuration file (defining values for
+# communications settings, but not the data source itself).
 writeLines(c("autoclose = TRUE",
              "readOnlyOptimize = TRUE",
              "visible = FALSE"),
