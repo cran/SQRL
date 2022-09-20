@@ -4,11 +4,11 @@
 \alias{sqrl}
 \docType{package}
 \title{
-Facilitates Database Interaction
+Simple and Powerful ODBC Interfaces
 }
 \description{
-Streamlines exploratory work and short-order ad hoc jobs on \acronym{ODBC} data
-sources.
+Streamlines interactive exploratory work, and short-order ad hoc jobs, on
+\acronym{ODBC} data sources.
 }
 \details{
 Automatically generates a dedicated and like-named interface function to each
@@ -21,7 +21,6 @@ the addition of flow-control structures within and around \acronym{SQL}, and the
 use of libraries of stored scripts.
 Additional sources and interfaces can be defined at any time.
 The package is a wrapper about \pkg{RODBC}.
-This is version 1.0.0.
 }
 \author{
 Mike Lee

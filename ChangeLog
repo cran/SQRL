@@ -1,0 +1,6 @@
+Version 1.0.1 (2022-09-20)
+
+  * Tweaked to avoid warnings that could occur when reading communication
+    parameters from a file in R >= 4.2.0.
+  * Removed explicit namespacing of base:: functions.
+	* Minor alterations to vignette and manual.

@@ -45,7 +45,7 @@ Whatever your nominal role, if it comes with access to an organisation's
 database, then the occasional explore-pull-summarise request is almost
 inevitable.
 The aim of SQRL is to turn those around as quickly as possible, letting you
-get back to serious thinking.
+get back to the fun stuff.
 
 SQRL handles (RODBC) communications in the background; silently opening
 connections and applying preferences, without bothering the user.
@@ -101,7 +101,7 @@ If this
 \fl\com{/* This script has three statements. */}
 \fl\key{use} \sql{database;}
 \fl\key{insert into} \sql{table1}
-\fl\tab\key{select} \sql{*} \key{from} \sql{table2};
+\fl\tab\key{select} \sql{*} \key{from} \sql{table2;}
 \fl\key{drop table} \sql{table2;}
 \end{file}
 is the content of file `sequence.sql', then
@@ -129,7 +129,8 @@ Here is a listing of one such script;
 \fl\key{select} \sql{*} \key{from} \sql{database.table}
 \fl\key{where} \sql{column >} \tag{<R>} \rin{pnorm(x)} \tag{</R>}
 \end{file}
-If this is the content of a file `query.sqrl', then it could be submitted like so;
+If this is the content of a file `query.sqrl', then it could be submitted like
+so;
 \begin{shell}
 > arx("query.sqrl", x = 3)
 \end{shell}
@@ -522,17 +523,17 @@ The space is optional.
 \section{Ending Sessions}
 To close the connection to data source `arx', use
 \begin{shell}
-arx("close")
+> arx("close")
 \end{shell}
 To close the connections to all SQRL data sources, use
 \begin{shell}
-sqrlAll("close")
+> sqrlAll("close")
 \end{shell}
 
 To close the connections to all SQRL data sources, remove their interface
 functions, and unload the SQRL library, use
 \begin{shell}
-sqrlOff()
+> sqrlOff()
 \end{shell}
 After this, no further communication is possible with any data source (via SQRL,
 until it is reloaded).

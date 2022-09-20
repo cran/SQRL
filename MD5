@@ -1,10 +1,11 @@
-065f6b7a908a362141b3d41d88a6d854 *DESCRIPTION
+b9d53de6b7025a151dcc10a686225fa8 *ChangeLog
+832109b51c727a42643a98e52d507742 *DESCRIPTION
 e7c776d6d6e61f9cfbbce76a353ddaf9 *NAMESPACE
-4f38d77809babd2e40c65b6bf9baed0b *R/SQRL.R
-9fb1d58554d43b92079ef8a495c2af60 *build/vignette.rds
-e3809b3373c583b631a0c64fac0b052f *inst/doc/SQRL_primer.Rnw
-53de9a8170baaaee077dc51591374389 *inst/doc/SQRL_primer.pdf
-879d4e9156e8dd33c5611bb90b5d90bf *man/SQRL-package.Rd
+2edd5664f6bb823cce7a42c9bcb43acb *R/SQRL.R
+c3042b5e0e57332ed910c5c34325a9ab *build/vignette.rds
+3105eaaf0fe7f6855c61ada0ec43f9dc *inst/doc/SQRL_primer.Rnw
+0d63e8caa238da767c1417014913e2b7 *inst/doc/SQRL_primer.pdf
+1c9034ae8b7217094d52af458177b8a1 *man/SQRL-package.Rd
 2a3f252bd95440db03f0eec0cc8ce22a *man/sqrlAll.Rd
 5aa233104b6890a4883e6d2f68058608 *man/sqrlConfig.Rd
 0bd9de77fb0ef58a43e23bac2a1a6eb1 *man/sqrlInterface.Rd
@@ -14,4 +15,4 @@ f7d4b3b22c9b61e62c3a585a8019fa61 *man/sqrlParams.Rd
 f27ed8a31ab9fd46cece8eddeef16f32 *man/sqrlSource.Rd
 c0b41a43148afac30edc702538057532 *man/sqrlSources.Rd
 062405dcc198e87a30671df940ca5847 *man/sqrlUsage.Rd
-e3809b3373c583b631a0c64fac0b052f *vignettes/SQRL_primer.Rnw
+3105eaaf0fe7f6855c61ada0ec43f9dc *vignettes/SQRL_primer.Rnw
