@@ -75,9 +75,9 @@ than \R environment variables.
 }
 \examples{
 # Define a new source (not from file).
-sqrlSource("Orac",
-           "DBQ=StarOne;UID=Avon;PWD=<pwd>",
-           "Driver={Oracle in OraDB18Home1}")
+sqrlSource("Orac", "UID=Avon;PWD=<pwd>",
+           "Driver=Oracle 19 ODBC driver",
+           "Server=db.starone.mil:1521/dwprd")
 
 # Review its configuration (parameter values).
 Orac("config")

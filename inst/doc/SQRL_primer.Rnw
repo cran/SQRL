@@ -42,10 +42,9 @@
 \maketitle
 \noindent
 Whatever your nominal role, if it comes with access to an organisation's
-database, then the occasional explore-pull-summarise request is almost
+database, then the occasional explore-pull-summarise task is almost
 inevitable.
-The aim of SQRL is to turn those around as quickly as possible, letting you
-get back to the fun stuff.
+The aim of SQRL is to turn those around as quickly as possible.
 
 SQRL handles (RODBC) communications in the background; silently opening
 connections and applying preferences, without bothering the user.

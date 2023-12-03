@@ -219,6 +219,8 @@ is opened.
 Manual definition may be necessary in the event that \pkg{SQRL} fails to
 identify an appropriate statement for the particular \acronym{DBMS} of the
 source.
+An invalid ping statement may lead to incorrect assessments of whether or not
+the connection is open.
 Manually setting \code{NULL} causes the statement to be redetermined the next
 time a connection is opened.
 Pings are submitted verbatim, without passing through \pkg{SQRL}'s parser.
@@ -324,6 +326,7 @@ A logical singleton.
 Controls whether or not to display verbose output during query submission.
 Intended mainly for debugging.
 The default value is \code{FALSE} (verbose output disabled).
+Verbose output is always disabled within non-interactive sessions.
 }
 \item{\var{visible}:}{
 A logical singleton.

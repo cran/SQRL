@@ -1,6 +1,20 @@
+Version 1.0.2 (2023-12-03)
+
+  * Results of metadata queries are now saved to the result parameter.
+  * Temporary parameter values (inside <with> blocks) can now be read from file.
+  * Fixed a bug where temporary passwords (set inside <with> blocks) would be
+    ignored unless a permanent password had previously been set.
+  * Temporary ping queries (set inside <with> blocks) are now retained beyond
+    their normal scope/lifetime if deleting them would leave an open connection
+    without a defined ping.
+  * Improved dynamic-help fallback prints help to the R Console as plain text
+    when tools or utils is unavailable, or when a rendering error occurs.
+  * Minor alterations to vignette and manual.
+
 Version 1.0.1 (2022-09-20)
 
   * Tweaked to avoid warnings that could occur when reading communication
     parameters from a file in R >= 4.2.0.
   * Removed explicit namespacing of base:: functions.
-	* Minor alterations to vignette and manual.
+  * Minor alterations to vignette and manual.
+

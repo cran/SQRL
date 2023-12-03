@@ -33,10 +33,10 @@
 # SqrlDefile()        Private. Extracts parameter values from container files.
 # SqrlDelegate()      Private. Delegates commands to appropriate functions.
 # SqrlDSNs()          Private. Registers existing DSN data sources with SQRL.
+# SqrlEscape()        Private. Escapes strings for help-file compatibility.
 # SqrlFace()          Private. Interfaces with the SQRL:Face environment.
-# SqrlFile()          Private. Sources SQL (and/or R) statements from a file.
-# SqrlHelp()          Private. Generates run-time help for interface functions.
-# SqrlHelper()        Private. Escapes strings for help-file compatibility.
+# SqrlHelp()          Private. Displays run-time help for interface functions.
+# SqrlHelper()        Private. Generates run-time help for interface functions.
 # SqrlIndicator()     Private. Toggles display of open-connection indicators.
 # SqrlInterface()     Private. Defines and/or deletes data source interfaces.
 # SqrlIsOpen()        Private. Tests whether or not source channels are open.
@@ -44,6 +44,7 @@
 # SqrlOpen()          Private. Opens connection channels to data sources.
 # SqrlParam()         Private. Gets and sets data source SQRL/RODBC parameters.
 # SqrlParams()        Private. Defines and returns various parameter groupings.
+# SqrlParse()         Private. Reads SQL (and/or R) statements from a script.
 # SqrlPath()          Private. Checks if args are the path to an existing file.
 # SqrlPing()          Private. Sets and submits ping queries to data sources.
 # SqrlPL()            Private. Detects procedural (PL) blocks within scripts.
@@ -53,7 +54,7 @@
 # SqrlSource()        Private. Registers/defines new data sources with SQRL.
 # SqrlSources()       Private. Look for, and summarise, known data sources.
 # SqrlSubmit()        Private. Submits SQL, retrieves results, handles errors.
-# SqrlSubScript()     Private. Relays data between SqrlFile() and SqrlSubmit().
+# SqrlSubScript()     Private. Relays data between SqrlParse() and SqrlSubmit().
 # SqrlTry()           Private. Silent error catching, with warning suppression.
 # SqrlValue()         Private. Wrapper to SqrlParam(). Keeps secrets secret.
 
@@ -226,7 +227,7 @@ SqrlClose <- function(datasource = "")
   # RODBC Calls:
   #   odbcClose().
   # SQRL Callers:
-  #   SqrlCache(), SqrlDelegate(), SqrlFile(), SqrlIsOpen(), SqrlOff().
+  #   SqrlCache(), SqrlDelegate(), SqrlParse(), SqrlIsOpen(), SqrlOff().
   # User:
   #   Has no direct access, unable to pass argument indirectly. No argument
   #   validity checks are required.
@@ -261,7 +262,7 @@ SqrlConfig <- function(datasource = "",
   #   When no configuration file is specified, this function acts as a getter,
   #   and returns a list of all SQRL/RODBC parameters and their current values.
   # SQRL Calls:
-  #   SqrlDefile(), SqrlFile(), SqrlInterface(), SqrlParam(), SqrlParams(),
+  #   SqrlDefile(), SqrlParse(), SqrlInterface(), SqrlParam(), SqrlParams(),
   #   SqrlPath(), SqrlValue().
   # SQRL Callers:
   #   SqrlDelegate(), SqrlHelp(), SqrlSource().
@@ -358,7 +359,7 @@ SqrlConfig <- function(datasource = "",
       SqrlParam(datasource, "reset", "library")
     } else
     {
-      SqrlFile(datasource, value, libmode = TRUE)
+      SqrlParse(datasource, value, libmode = TRUE)
     }
     conf["library"] <- list(SqrlValue(datasource, "library"))
   }
@@ -411,10 +412,8 @@ SqrlDefault <- function(datasource = "",
     "case"                = "nochange",
     "believeNRows"        = !grepl("SQLite", SqrlParam(datasource, "driver"),
                                     ignore.case = TRUE),
-    "colQuote"            = ifelse(grepl("MySQL",
-                                          SqrlParam(datasource, "driver"),
-                                          ignore.case = TRUE),
-                                    "`", "\""),
+    "colQuote"            = if (grepl("MySQL", SqrlParam(datasource, "driver"),
+                                      ignore.case = TRUE)) {"`"} else {"\""},
     "tabQuote"            = SqrlParam(datasource, "colQuote"),
     "interpretDot"        = TRUE,
     "DBMSencoding"        = "",
@@ -472,8 +471,8 @@ SqrlDefile <- function(parameter = "",
   # SQRL Calls:
   #   SqrlDefile() (self), SqrlParams(), SqrlPath(), SqrlTry().
   # SQRL Callers:
-  #   SqrlConfig(), SqrlDefile() (self), SqrlDelegate(), SqrlSource(),
-  #   sqrlInterface().
+  #   SqrlConfig(), SqrlDefile() (self), SqrlDelegate(), SqrlParse(),
+  #   SqrlSource(), sqrlInterface().
   # User:
   #   Has no direct access, but is able to supply (only) parameter and value via
   #   SqrlParam() from SqrlDelegate() and/or SqrlConfig(). The parameter is
@@ -601,14 +600,14 @@ SqrlDelegate <- function(datasource = "",
   # Returns:
   #   The result of the command (normally a data frame, sometimes a string).
   # SQRL Calls:
-  #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefile(), SqrlFile(),
+  #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefile(), SqrlParse(),
   #   SqrlHelp(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(), SqrlOpen(),
   #   SqrlParam(), SqrlParams(), SqrlPath(), SqrlProc(), SqrlSources(),
   #   SqrlStatement(), SqrlSubmit(), SqrlTry(), SqrlValue().
   # RODBC Calls:
   #   sqlColumns(), sqlTables(), sqlTypeInfo().
   # SQRL Callers:
-  #   SqrlFile() (via sqrl()), SqrlShell().
+  #   SqrlParse() (via sqrl()), SqrlShell().
   # User:
   #   User has no direct access, but is able to supply (only) the args.list
   #   argument from sqrlAll() and/or any data source interface (including
@@ -719,7 +718,7 @@ SqrlDelegate <- function(datasource = "",
       }
       params <- args.list[seq_along(args.list) != index]
       result <- withVisible(
-                    SqrlFile(datasource, script, envir, params, literal = TRUE))
+                  SqrlParse(datasource, script, envir, params, literal = TRUE))
       SqrlParam(datasource, "result", result$value, override = TRUE)
       if (!result$visible)
       {
@@ -731,7 +730,7 @@ SqrlDelegate <- function(datasource = "",
     # If one of the names in 'file', then submit a query from the file, and
     # treat any other (named) arguments as parameters to that query. It is this
     # function's responsibility to verify the existence and readability of the
-    # file before passing it to SqrlFile(). When multiple arguments are named
+    # file before passing it to SqrlParse(). When multiple arguments are named
     # 'file', the first of them is taken as the query file while the others are
     # treated as arguments to that query.
     if ("file" %in% args.names)
@@ -743,7 +742,7 @@ SqrlDelegate <- function(datasource = "",
         stop("File not found.")
       }
       params <- args.list[seq_along(args.list) != index]
-      result <- withVisible(SqrlFile(datasource, file.path, envir, params))
+      result <- withVisible(SqrlParse(datasource, file.path, envir, params))
       SqrlParam(datasource, "result", result$value, override = TRUE)
       if (!result$visible)
       {
@@ -752,7 +751,7 @@ SqrlDelegate <- function(datasource = "",
       return(result$value)
     }
 
-    # If one of the names is 'query', then pass the query to SqrlFile() (as a
+    # If one of the names is 'query', then pass the query to SqrlParse() (as a
     # script, not as a file name), with any other arguments as named parameters.
     # When multiple arguments are named 'query', the first of them is taken as
     # the query, while the others are treated as parameters of that query.
@@ -766,7 +765,7 @@ SqrlDelegate <- function(datasource = "",
       }
       script <- script$value
       params <- args.list[seq_along(args.list) != index]
-      result <- withVisible(SqrlFile(datasource, script, envir, params, TRUE))
+      result <- withVisible(SqrlParse(datasource, script, envir, params, TRUE))
       SqrlParam(datasource, "result", result$value, override = TRUE)
       if (!result$visible)
       {
@@ -821,11 +820,12 @@ SqrlDelegate <- function(datasource = "",
               {
                 stop(libdef$value)
               }
-              SqrlFile(datasource, libdef$value, envir,
+              SqrlParse(datasource, libdef$value, envir,
                         libmode = TRUE, literal = TRUE)
             } else
             {
-              SqrlFile(datasource, path, envir, libmode = TRUE, literal = FALSE)
+              SqrlParse(datasource, path, envir,
+                        libmode = TRUE, literal = FALSE)
             }
           }
           result[param] <- list(SqrlValue(datasource, param))
@@ -887,7 +887,7 @@ SqrlDelegate <- function(datasource = "",
     }
 
     # Submit the script and its parameters. Retrieve and return the result.
-    result <- withVisible(SqrlFile(datasource, script, envir, params, literal))
+    result <- withVisible(SqrlParse(datasource, script, envir, params, literal))
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
     {
@@ -913,7 +913,7 @@ SqrlDelegate <- function(datasource = "",
   if (!is.null(procedure))
   {
     result <- withVisible(
-                        SqrlFile(datasource, procedure, envir, literal = TRUE))
+                        SqrlParse(datasource, procedure, envir, literal = TRUE))
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
     {
@@ -926,7 +926,7 @@ SqrlDelegate <- function(datasource = "",
   file.path <- SqrlPath(args.list)
   if (!is.null(file.path))
   {
-    result <- withVisible(SqrlFile(datasource, file.path, envir))
+    result <- withVisible(SqrlParse(datasource, file.path, envir))
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
     {
@@ -947,7 +947,7 @@ SqrlDelegate <- function(datasource = "",
       stop(statement$value)
     }
     result <- withVisible(
-                  SqrlFile(datasource, statement$value, envir, literal = TRUE))
+                  SqrlParse(datasource, statement$value, envir, literal = TRUE))
 
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
@@ -970,7 +970,7 @@ SqrlDelegate <- function(datasource = "",
       stop(statement$value)
     }
     result <- withVisible(
-                  SqrlFile(datasource, statement$value, envir, literal = TRUE))
+                  SqrlParse(datasource, statement$value, envir, literal = TRUE))
 
     SqrlParam(datasource, "result", result$value, override = TRUE)
     if (!result$visible)
@@ -1036,6 +1036,7 @@ SqrlDelegate <- function(datasource = "",
     {
       stop(result$value)
     }
+    SqrlParam(datasource, "result", result$value, override = TRUE)
     return(result$value)
   }
 
@@ -1093,7 +1094,7 @@ SqrlDelegate <- function(datasource = "",
       SqrlParam(datasource, "reset", first.word)
     } else
     {
-      SqrlFile(datasource, other.words, envir, libmode = TRUE,
+      SqrlParse(datasource, other.words, envir, libmode = TRUE,
                 literal = is.null(SqrlPath(other.words)))
     }
     return(invisible(SqrlValue(datasource, "library")))
@@ -1132,6 +1133,7 @@ SqrlDelegate <- function(datasource = "",
     {
       stop(result$value)
     }
+    SqrlParam(datasource, "result", result$value, override = TRUE)
     return(result$value)
   }
 
@@ -1188,6 +1190,7 @@ SqrlDelegate <- function(datasource = "",
     {
       stop(result$value)
     }
+    SqrlParam(datasource, "result", result$value, override = TRUE)
     return(result$value)
   }
 
@@ -1195,7 +1198,7 @@ SqrlDelegate <- function(datasource = "",
   if ("typeinfo" == first.word)
   {
     SqrlOpen(datasource)
-    type <- ifelse(first.word == only.word, "all", other.words)
+    type <- if (first.word == only.word) {"all"} else {other.words}
     SqrlIndicator(datasource, "query")
     info <- SqrlTry(RODBC::sqlTypeInfo(
                                 channel = SqrlParam(datasource, "channel"),
@@ -1208,6 +1211,7 @@ SqrlDelegate <- function(datasource = "",
     {
       stop(info$value)
     }
+    SqrlParam(datasource, "result", info$value, override = TRUE)
     return(info$value)
   }
 
@@ -1241,7 +1245,7 @@ SqrlDelegate <- function(datasource = "",
     stop(statement$value)
   }
   result <- withVisible(
-                  SqrlFile(datasource, statement$value, envir, literal = TRUE))
+                  SqrlParse(datasource, statement$value, envir, literal = TRUE))
 
   SqrlParam(datasource, "result", result$value, override = TRUE)
   if (!result$visible)
@@ -1304,6 +1308,70 @@ SqrlDSNs <- function(import = "all")
 
   # Return invisible NULL.
   return(invisible(NULL))
+}
+
+SqrlEscape <- function(value = "",
+                        plain = FALSE)
+{
+  # Formats parameter values for inclusion in help files.
+  # Args:
+  #   value : Either a list (source configuration) or a single character string.
+  #   plain : If TRUE, do not escape % characters (R documentation comments).
+  # Returns:
+  #   The input values, converted to strings and (by default) with %s escaped.
+  # SQRL Calls:
+  #   None.
+  # SQRL Callers:
+  #   SqrlHelp().
+  # User:
+  #   Has no direct access, but is able to control the supplied values through
+  #   parameter settings (interface name, ping query, and so on). These are
+  #   converted to strings and escaped. No further checking is required.
+
+  # Deparse and escape the entire configuration parameter-value list.
+  # Any RODBC channel is reduced to its integer label.
+  # Any library is truncated to its first element (plus an ellipsis).
+  if (identical(class(value), class(list())))
+  {
+    if (!is.null(value[["channel"]]))
+    {
+      value[["channel"]] <- as.numeric(value[["channel"]])
+    }
+    if ("library" %in% names(value))
+    {
+      if (!is.null(value[["library"]])
+          && (length(value[["library"]]) > 1L))
+      {
+        value[["library"]] <- paste0(deparse(value[["library"]][1L]), ", ...")
+      } else
+      {
+        value[["library"]] <- deparse(value[["library"]])
+      }
+      if (!plain)
+      {
+        value[["library"]] <- gsub("%", "\\\\%", value[["library"]])
+      }
+    }
+    for (name in names(value)[names(value) != "library"])
+    {
+      value[[name]] <- deparse(value[[name]])
+      if (!plain)
+      {
+        value[[name]] <- gsub("%", "\\\\%", value[[name]])
+      }
+    }
+    return(value)
+  }
+
+  # The value is a single character-string.
+  # For R documentation (.Rd) output, return it with any %s escaped.
+  if (!plain)
+  {
+    return(gsub("%", "\\\\%", value))
+  }
+
+  # For plain-text output, return the string verbatim.
+  return(value)
 }
 
 SqrlFace <- function(interface = "",
@@ -1381,7 +1449,1937 @@ SqrlFace <- function(interface = "",
   return(get(interface, "SQRL:Face", mode = "function", inherits = FALSE))
 }
 
-SqrlFile <- function(datasource = "",
+SqrlHelp <- function(datasource = "",
+                      type = "",
+                      clean = FALSE)
+{
+  # Displays run-time generated help for SQRL interface functions.
+  # Args:
+  #   datasource : The name of a known data source.
+  #   type       : The requested help format ('text' or 'html').
+  #   clean      : If set to TRUE, any old temp files are removed.
+  # Returns:
+  #   Invisible NULL, after displaying help.
+  # SQRL Calls:
+  #   SqrlHelp() (self), SqrlHelper(), SqrlPath(), SqrlTry(), srqlHelp.
+  # tools Calls:
+  #   Rd2HTML(), Rd2txt() (only if the tools package is installed).
+  # utils Calls:
+  #   browseURL(), help() (only if utils is attached).
+  # SQRL Callers:
+  #   SqrlDelegate(), SqrlHelp() (self), .onLoad(), .onUnload().
+  # User:
+  #   Has no direct access, but is able to submit (only) the 'type' argument.
+  #   That is coerced to an allowed value, and no further checks are required.
+
+  # If the clean argument was set, prune any old temp files and return the temp
+  # files list (after creating an empty list if the list does not yet exist).
+  if (clean)
+  {
+    if (!exists("temps", srqlHelp, inherits = FALSE))
+    {
+      return(assign("temps", character(0L), srqlHelp))
+    }
+    temps <- get("temps", srqlHelp, inherits = FALSE)
+    temps <- temps[file.exists(temps)]
+    temps <- temps[!suppressWarnings(file.remove(temps))]
+    return(assign("temps", temps, srqlHelp))
+  }
+
+  # Unless a supported help type was supplied, use the default help type.
+  # This may be NULL valued. Types are not case sensitive.
+  type <- tolower(type)
+  if (!identical(type, "text")
+      && !identical(type, "html"))
+  {
+    type <- tolower(getOption("help_type"))
+  }
+
+  # If the utils package (which provides the help() function) is not loaded, or
+  # if the tools package (which converts Rd files) is unavailable, then display
+  # text-format help on the R console.
+  if (!("package:utils" %in% search())
+      || (length(find.package("tools", quiet = TRUE)) == 0L))
+  {
+    return(cat(SqrlHelper(datasource, plaintext = TRUE), sep = "\n"))
+  }
+
+  # The tools package is available. We shall dynamically generate tailored help
+  # for the invoking (data source's) interface function. This involves temp
+  # files. Remove any existing SQRL temp files (from any prior SqrlHelp() call).
+  temps <- SqrlHelp(clean = TRUE)
+
+  # Generate R documentation (Rd) formatted help, and write it to a temp file.
+  rdfile <- tempfile(fileext = ".Rd")
+  temps <- assign("temps", c(temps, rdfile), srqlHelp)
+  writeLines(SqrlHelper(datasource), rdfile)
+
+  # Detect and handle RStudio, which does things a bit differently (different
+  # viewer, different style, different file location rules). For RStudio, the
+  # 'type' argument is ignored (help is only provided in HTML format).
+  if (nzchar(Sys.getenv("RSTUDIO_USER_IDENTITY")))
+  {
+    # Rstudio's viewer seems to want a style file in the same directory as the
+    # help (HTML) file (and only wants the file name of that CSS file, not its
+    # full path). That compels us to copy a style file to this temp file.
+    csstemp <- tempfile(fileext = ".css")
+    temps <- assign("temps", c(temps, csstemp), srqlHelp)
+
+    # Set a default cascading style sheet. This won't exist within the temp
+    # directory, in which case the viewer will apply default styling when it
+    # does not find the CSS file (no harm done, but not aesthetically ideal).
+    cssfile <- "R.css"
+
+    # These locations are where we think the RStudio and R style files will be.
+    # The two styles are different, so the RStudio file is preferred.
+    cssfiles <- c(file.path(Sys.getenv("RSTUDIO_PANDOC"),
+                            "../../resources/R.css"),
+                  file.path(R.home(), "library/base/html/R.css"))
+
+    # If we find, and can copy, the RStudio file, use that. Otherwise, if we
+    # find, and can copy, the base R file, use that. If we find neither, the
+    # default style will apply.
+    for (css in cssfiles)
+    {
+      if (!is.null(SqrlPath(css))
+          && file.copy(css, csstemp))
+      {
+        cssfile <- csstemp
+        break
+      }
+    }
+
+    # Convert the Rd to HTML, write that to another temp file, open that in the
+    # RStudio viewer, and return invisible NULL. Note the use of basename().
+    htmlfile <- tempfile(fileext = ".html")
+    assign("temps", c(temps, htmlfile), srqlHelp)
+    if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
+                                stylesheet = basename(cssfile)))$error)
+    {
+      # If that fails, show plain-text help on the R console.
+      return(cat(SqrlHelper(datasource, plaintext = TRUE), sep = "\n"))
+    }
+    getOption("viewer")(htmlfile)
+    return(invisible(NULL))
+  }
+
+  # If the help type is 'html', convert the Rd to HTML, write that to another
+  # temp file, open that file in the default browser, and return invisible NULL.
+  if (identical(type, "html"))
+  {
+    htmlfile <- tempfile(fileext = ".html")
+    assign("temps", c(temps, htmlfile), srqlHelp)
+    cssfile <- paste0(R.home(), "/library/base/html/R.css")
+    if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
+                                stylesheet = cssfile))$error)
+    {
+      # If that fails, show plain-text help on the R console.
+      return(cat(SqrlHelper(datasource, plaintext = TRUE), sep = "\n"))
+    }
+    utils::browseURL(htmlfile)
+    return(invisible(NULL))
+  }
+
+  # Otherwise, convert the Rd to text, write that to another temp file, open
+  # that file in the default text viewer (pager), and return invisible NULL.
+  txtfile <- tempfile(fileext = ".txt")
+  assign("temps", c(temps, txtfile), srqlHelp)
+  if (SqrlTry(tools::Rd2txt(rdfile, txtfile, package = "SQRL"))$error)
+  {
+    # If that fails, show plain-text help on the R console.
+    return(cat(SqrlHelper(datasource, plaintext = TRUE), sep = "\n"))
+  }
+  file.show(txtfile)
+  return(invisible(NULL))
+}
+
+SqrlHelper <- function(datasource = "",
+                        plaintext = FALSE)
+{
+  # Generates help for SQRL interface functions during run-time.
+  # Args:
+  #   datasource : The name of a known data source.
+  #   plaintext  : If TRUE, returns plain text instead of R documentation.
+  # Returns:
+  #   A character vector of dynamically-generated help, containing a listing of
+  #   the current datasource configuration, in either R documentation (Rd) or
+  #   plain text format.
+  # SQRL Calls:
+  #   SqrlConfig(), SqrlEscape().
+  # SQRL Callers:
+  #   SqrlHelp().
+  # User:
+  #   Has no direct access, but is able to control the datasource parameter
+  #   settings (interface name, ping query, and so on). These are handled by
+  #   SqrlEscape(), so no checks are required here.
+
+  # Select R documentation (Rd) formatting commands or plain text substitutes.
+  # We do this rather than gsub() Rd to plain text, in case any of the below
+  # inexplicably appear within a SQRL parameter.
+  p <- if (plaintext) 2L else 1L
+  ba <- switch(p, "\\acronym{", "")             # Begin acronym highlighting.
+  ea <- switch(p, "}", "")                      # End acronym highlighting.
+  bc <- switch(p, "\\code{", "'")               # Begin code highlighting.
+  ec <- switch(p, "}", "'")                     # End code highlighting.
+  bd <- switch(p, "\\description{", "Description:\n") # Begin description.
+  ed <- switch(p, "}", "")                      # End description (section).
+  bf <- switch(p, "\\file{", "'")               # Begin filename highlighting.
+  ef <- switch(p, "}", "'")                     # End filename highlighting.
+  bh <- switch(p, "\\section{", "")             # Begin new section.
+  eh <- switch(p, "}", ":\n")                   # End current section.
+  bp <- switch(p, "{\\preformatted{", "")       # Begin preformatted region.
+  ep <- switch(p, "}}", "")                     # End preformatted region.
+  bq <- switch(p, "\\sQuote{", "'")             # Begin single-quoted text.
+  eq <- switch(p, "}", "'")                     # End single-quoted text.
+  bt <- switch(p, "\\title{", "")               # Begin title text.
+  et <- switch(p, "}", "\n")                    # End title text.
+  tb <- switch(p, "", "    ")                   # Tab indent for plain text.
+
+  # Obtain the current source configuration (all parameter values).
+  config <- SqrlConfig(datasource)
+
+  # Extract the driver from the configuration, and escape any % characters
+  # (these are the Rd comment symbol, even within \preformatted{} sections).
+  if (grepl("[[:graph:]]", config[["driver"]]))
+  {
+    driver <- paste0(bf, SqrlEscape(config[["driver"]], plaintext), ef)
+  } else
+  {
+    driver <- "unknown or undefined"
+  }
+
+  # Extract and escape the data source's (SQRL) name.
+  if (identical(config[["name"]], config[["interface"]]))
+  {
+    dsrc <- "of the same name"
+  } else
+  {
+    dsrc <- paste0(bf, SqrlEscape(config[["name"]], plaintext), ef)
+  }
+
+  # Establish the channel status, and choose the appropriate phrase.
+  if (is.null(config[["channel"]]))
+  {
+    ochan <- "closed"
+  } else
+  {
+    ochan <- "open"
+  }
+
+  # Construct example queries, appropriate to the source's driver.
+  if (grepl("oracle|db2", driver, ignore.case = TRUE))
+  {
+    query1 <- "select 1 from dual"
+    query2 <- "\"select \", sample(6, 1), \" from dual\""
+  } else
+  {
+    query1 <- "select 1"
+    query2 <- "\"select \", sample(6, 1)"
+  }
+
+  # Extract and escape the interface function's name.
+  iface <- SqrlEscape(config[["interface"]], plaintext)
+
+  # Set a package name for plain text output, or a document title for Rd format.
+  if (plaintext)
+  {
+    doctitle <- ""
+    package <- " (package:SQRL)"
+  } else
+  {
+    doctitle <- paste0("\\name{", iface, "}")
+    package <- ""
+  }
+
+  # Escape and list all parameter values.
+  config <- SqrlEscape(config, plaintext)
+  csc <- paste(names(config), "=", config)
+
+  # Construct and return the help, as either plain text or R documentation (Rd
+  # format), as was requested.
+  c(doctitle,
+    paste0(bt, "ODBC Interface Function ", bq, iface, eq, package, et),
+    bd,
+    paste0(tb, "The function ", bc, iface, ec,
+            " is an interface to the data source ", dsrc, "."),
+    paste0(tb, "The ", ba, "ODBC", ea, " driver is ", driver, "."),
+    paste0(tb, "Communications are ", ochan, "."),
+    ed,
+    paste0(bh, "Listing Sources", eh, bp),
+    paste0(tb, "# View the associated source definition."),
+    paste0(tb, iface, "(\"source\")"),
+    "",
+    paste0(tb, "# See all data sources and their interfaces."),
+    paste0(tb, iface, "(\"sources\")"),
+    ep,
+    paste0(bh, "Opening and Closing", eh, bp),
+    paste0(tb, "# Open a connection to the data source."),
+    paste0(tb, iface, "()"),
+    "",
+    paste0(tb, "# Check if the connection is open."),
+    paste0(tb, iface, "(\"isopen\")"),
+    "",
+    paste0(tb, "# Close the connection."),
+    paste0(tb, iface, "(\"close\")"),
+    "",
+    paste0(tb, "# Close the connection when not in use."),
+    paste0(tb, iface, "(autoclose = TRUE)"),
+    ep,
+    paste0(bh, "Submitting Queries", eh, bp),
+    paste0(tb, "# Submit a query."),
+    paste0(tb, iface, "(\"", query1, "\")"),
+    "",
+    paste0(tb, "# Submit a compound query."),
+    paste0(tb, iface, "(", query2, ")"),
+    "",
+    paste0(tb, "# Submit a query from file."),
+    paste0(tb, iface, "(\"my/file.sql\")"),
+    "",
+    paste0(tb, "# Submit a parameterised query from file."),
+    paste0(tb, iface, "(\"rhaphidophoridae.sqrl\", genus = \"gymnoplectron\")"),
+    "",
+    paste0(tb, "# Force submission as a query."),
+    paste0(tb, iface, "(query = \"help\")"),
+    ep,
+    paste0(bh, "Communication Parameters", eh, bp),
+    paste0(tb, "# Get a named parameter value."),
+    paste0(tb, iface, "(\"uid\")"),
+    "",
+    paste0(tb, "# Set a named parameter value."),
+    paste0(tb, iface, "(visible = TRUE)"),
+    "",
+    paste0(tb, "# Reset a parameter to its default value."),
+    paste0(tb, iface, "(reset = \"nullstring\")"),
+    "",
+    paste0(tb, "# List all parameter values."),
+    paste0(tb, iface, "(\"config\")"),
+    "",
+    paste0(tb, "# Set multiple parameter values from file."),
+    paste0(tb, iface, "(config = \"path/to/config/file\")"),
+    ep,
+    paste0(bh, "Further Assistance", eh, bp),
+    paste0(tb, "# Additional usage examples."),
+    paste0(tb, "?sqrlUsage"),
+    "",
+    paste0(tb, "# Detailed parameter descriptions."),
+    paste0(tb, "?sqrlParams"),
+    ep,
+    paste0(bh, "Current Settings", eh, bp),
+    paste0(tb, csc),
+    ep)
+}
+
+SqrlIndicator <- function(datasource = "",
+                          action = "",
+                          marker = "all")
+{
+  # Alters the display-state of open-connection (channel) indicators.
+  # Args:
+  #   datasource : The name of a known (to SQRL) data source.
+  #   action     : One of 'show', 'hide', 'busy', or 'done'.
+  #   marker     : One of 'prompt', 'wintitle', or 'all' (the default).
+  # Returns:
+  #   Invisible NULL, after making the requested indicator changes.
+  # SQRL Calls:
+  #   SqrlParam().
+  # utils Calls:
+  #   getWindowTitle(), setWindowTitle() (only if the utils package is attached,
+  #   and these two functions exist within it on the current OS/platform).
+  # SQRL Callers:
+  #   SqrlDelegate(), SqrlParam(), SqrlPing(), SqrlSubmit().
+  # User:
+  #   Has no direct access, and is unable to indirectly supply any of the
+  #   arguments. Argument validity checks are not required.
+
+  # TRUE if the indicators are potentially visible (when the data source's
+  # channel is open). No test of openness is made here; that should be performed
+  # (where necessary) before calling this function.
+  visible <- (interactive()
+              && SqrlParam(datasource, "visible"))
+
+  # TRUE if, and only if, the prompt is to be altered.
+  do.prompt <- (visible
+                && (marker %in% c("all", "prompt")))
+
+  # TRUE if, and only if, the window title is to be altered.
+  # The get/setWindowTitle() functions only exist on Windows versions of R,
+  # and only work with Rgui, R Console, and Rterm (not with RStudio).
+  # We test ("package:utils" %in% search()), rather than
+  # requireNamespace("utils", quietly = TRUE), because, if utils is attached,
+  # we then need to look inside it to see whether or not the get & set functions
+  # exist. This doesn't work without attachment (having the namespace available
+  # does not suffice). We could promote our utils reliance from suggests to
+  # depends, in the package description file, but would rather not have this
+  # strict requirement (this indicator feature is nice to have, but not
+  # absolutely necessary). Utils is normally attached on start-up, anyhow.
+  do.title <- (visible
+                && (marker %in% c("all", "wintitle"))
+                && ("package:utils" %in% search())
+                && exists("getWindowTitle", where = "package:utils",
+                          mode = "function", inherits = FALSE)
+                && exists("setWindowTitle", where = "package:utils",
+                          mode = "function", inherits = FALSE))
+
+  # When the action is 'show', apply (append and/or prepend) the indicator(s).
+  if (action == "show")
+  {
+    # Append window title-bar open-channel indicator.
+    if (do.title)
+    {
+      indic <- SqrlParam(datasource, "wintitle")
+      if (grepl("[[:graph:]]", indic))
+      {
+        utils::setWindowTitle(title = sub("\\s+$", "",
+                      paste(sub("\\s+$", "", utils::getWindowTitle()), indic)))
+      }
+    }
+    # Prepend command-prompt open-channel indicator.
+    if (do.prompt)
+    {
+      indic <- SqrlParam(datasource, "prompt")
+      options(prompt = paste0(indic, getOption("prompt")))
+    }
+    # Return invisible NULL.
+    return(invisible(NULL))
+  }
+
+  # When the action is 'hide', remove the indicator(s). This will work (as in,
+  # does nothing, quietly) if the indicators aren't actually on to begin with.
+  # Where this can go wrong, is when the open indicators are defined as, say,
+  # 'A', and 'AB'. Removal of 'A" from 'ABA' might leave 'BA'. So don't do that.
+  if (action == "hide")
+  {
+    # Remove one open-channel indicator from the window title.
+    if (do.title)
+    {
+      indic <- SqrlParam(datasource, "wintitle")
+      if (grepl("[[:graph:]]", indic))
+      {
+        windowtitle <- utils::getWindowTitle()
+        if (grepl(indic, windowtitle, fixed = TRUE))
+        {
+          position <- max(gregexpr(indic, windowtitle, fixed = TRUE)[[1L]])
+          before <- sub("\\s+$", "", substring(windowtitle, 1L, position - 1L))
+          after <- substring(windowtitle, position + nchar(indic))
+          utils::setWindowTitle(title = sub("\\s+$", "", paste0(before, after)))
+        }
+      }
+    }
+    # Remove one open-channel indicator from the R prompt.
+    if (do.prompt)
+    {
+      indic <- SqrlParam(datasource, "prompt")
+      if (nchar(indic) > 0L)
+      {
+        options(prompt = sub(indic, "", getOption("prompt"), fixed = TRUE))
+      }
+    }
+    # Return invisible NULL.
+    return(invisible(NULL))
+  }
+
+  # When the action is 'query', 'fetch', or 'ping', append a job-in-progress
+  # marker ('*', '+', or '?', respectively) to the data source's window title
+  # indicator, then return invisible NULL. This will work (as in, does nothing,
+  # quietly) if the indicator isn't actually on.
+  if (action %in% c("query", "fetch", "ping"))
+  {
+    glyph <- switch(action, "query" = "*", "fetch" = "+", "ping" = "?")
+    if (do.title)
+    {
+      indic <- SqrlParam(datasource, "wintitle")
+      glyphed <- paste0(indic, glyph)
+      if (grepl("[[:graph:]]", indic))
+      {
+        windowtitle <- utils::getWindowTitle()
+        for (unglyphed in paste0(indic, c(" ", "*", "+", "?", "")))
+        {
+          if (grepl(unglyphed, windowtitle, fixed = TRUE))
+          {
+            utils::setWindowTitle(title = sub("\\s+$", "",
+                            sub(unglyphed, glyphed, windowtitle, fixed = TRUE)))
+            break
+          }
+        }
+      }
+    }
+    return(invisible(NULL))
+  }
+
+  # When the action is 'done', remove a job-in-progress marker ('*', '+', '?')
+  # from the data source's window title indicator, then return invisible NULL.
+  # This will work (does nothing, quietly) if no marker is actually present.
+  if (action == "done")
+  {
+    if (do.title)
+    {
+      indic <- SqrlParam(datasource, "wintitle")
+      unglyphed <- paste0(indic, " ")
+      if (grepl("[[:graph:]]", indic))
+      {
+        windowtitle <- utils::getWindowTitle()
+        for (glyphed in paste0(indic, c("*", "+", "?")))
+        {
+          if (grepl(glyphed, windowtitle, fixed = TRUE))
+          {
+            utils::setWindowTitle(title = sub("\\s+$", "",
+                            sub(glyphed, unglyphed, windowtitle, fixed = TRUE)))
+            break
+          }
+        }
+      }
+    }
+    return(invisible(NULL))
+  }
+
+  # This should be unreachable, but if we were to arrive here, return NULL.
+  return(invisible(NULL))
+}
+
+SqrlInterface <- function(datasource = "",
+                          interface = "",
+                          vital = TRUE)
+{
+  # Constructs a user-interface to a specified data source.
+  # Args:
+  #   datasource : The name of a known data source.
+  #   interface  : The name to use for that data source's interface.
+  #   vital      : When set to FALSE, name conflicts are non-fatal.
+  # Returns:
+  #   A function (named <interface>) for interacting with the data source.
+  #   Any pre-existing interface to that data source will be deleted.
+  #   If interface is not specified, the interface name defaults to the data
+  #   source name (sans whitespace). When interface == "remove", no new
+  #   interface is created, but any existing interface will be deleted. (There
+  #   is no loss of generality, since "remove" is prohibited as an interface
+  #   name due to its conflicting with the base::remove() function.)
+  # SQRL Calls:
+  #   SqrlFace(), SqrlInterface() (self), SqrlParam().
+  # SQRL Callers:
+  #    SqrlCache(), SqrlConfig(), SqrlDelegate(), SqrlDSNs(), SqrlInterface()
+  #    (self), SqrlOff(), SqrlParam(), SqrlSource(), sqrlInterface().
+  # User:
+  #   Has no direct access, but is able to indirectly supply the datasource
+  #   argument via sqrlInterface(), and through SqrlSources() by editing the
+  #   registered data source names (DSNs) prior to loading SQRL. The user can
+  #   indirectly supply the interface argument via sqrlInterface(),
+  #   SqrlDelegate(), and through SqrlSources() by editing the DSNs prior to
+  #   loading SQRL. The user cannot indirectly supply the vital argument. In
+  #   all cases, existence of the datasource is established before calling this
+  #   function. The interface value could be anything, and is checked here.
+
+  # This is the user-interface function-body definition for the data source.
+  uibody <- paste0("function(...) {SqrlShell(\"", datasource,
+                    "\", base::parent.frame(), base::list(...))}")
+
+  # Abort on invalid interface (name). Allowed values are NULL or a character
+  # string. The requested name may, or may not, be available and assignable.
+  if (!is.null(interface)
+      && (!identical(class(interface), class(character()))
+          || (length(interface) != 1L)
+          || !nzchar(trimws(interface))))
+  {
+    if (!vital)
+    {
+      return(invisible(NULL))
+    }
+    stop("Invalid interface name.")
+  }
+
+  # Remove any name and leading or trailing whitespace from the interface
+  # argument. Applying trimws() to NULL would produce character(0). The
+  # as.character() function removes any name attribute the string may have.
+  if (!is.null(interface))
+  {
+    interface <- trimws(as.character(interface))
+  }
+
+  # Isolate the previous interface (NULL when no interface was defined).
+  preface <- SqrlParam(datasource, "interface")
+
+  # On a request to delete the data source's interface, if we can confirm the
+  # interface object retains its original SQRL definition, then we delete that
+  # object. Either way, the interface is deregistered in the data source's
+  # cache, and an invisible NULL is returned.
+  if (is.null(interface)
+      || identical(interface, "remove"))
+  {
+    if (!is.null(preface))
+    {
+      if (SqrlFace(preface, exists = TRUE))
+      {
+        fun <- paste(deparse(SqrlFace(preface)), collapse = "")
+        if (gsub("[[:space:]]+", "", fun) == gsub("[[:space:]]+", "", uibody))
+        {
+          SqrlFace(preface, delete = TRUE)
+        }
+      }
+      SqrlParam(datasource, "interface", NULL)
+    }
+    return(invisible(NULL))
+  }
+
+  # Check that the preface actually is a SQRL interface, and set NULL otherwise.
+  # To be an interface, it must be registered within the source parameter cache,
+  # exist as a function, and have the precise uibody definition (above).
+  if (!is.null(preface)
+      && (SqrlFace(preface, exists = FALSE)
+          || (gsub("[[:space:]]+", "",
+                    paste(deparse(SqrlFace(preface)), collapse = ""))
+                    != gsub("[[:space:]]+", "", uibody))))
+  {
+    preface <- NULL
+    SqrlParam(datasource, "interface", NULL)
+  }
+
+  # If no interface was specified, use the data source name (sans whitespace).
+  if (nchar(interface) < 1L)
+  {
+    interface <- gsub("[[:space:]]+", "", datasource)
+  }
+
+  # If the interface already exists (under the same name), return it (silently).
+  # The above chack on preface guarantees existence within envir when not NULL.
+  if (!is.null(preface)
+      && (preface == interface))
+  {
+    return(invisible(interface))
+  }
+
+  # Ensure the interface name is assignable. Non-assignability is usually fatal,
+  # but when vital == FALSE the function exists normally (SqrlSources() uses
+  # this when auto-generating functions, since 'A<<B' is a valid DSN name).
+  if (interface != make.names(interface))
+  {
+    if (!vital)
+    {
+      return(invisible(NULL))
+    }
+    stop("Unassignable interface name.")
+  }
+
+  # Abort if some other object already exists under the chosen name.
+  # Usually, these conflicts are fatal, but when vital == FALSE the function
+  # exits normally (SqrlSources() uses this when auto-generating interfaces).
+  if (SqrlFace(interface, clashes = TRUE))
+  {
+    if (!vital)
+    {
+      return(invisible(NULL))
+    }
+    stop("Interface name conflict.")
+  }
+
+  # If the data source already has an interface (under some other name), then
+  # delete that existing interface (before continuing).
+  if (!is.null(preface)
+      && (preface != interface))
+  {
+    SqrlInterface(datasource, "remove")
+  }
+
+  # Assign the interface function to the chosen name. Note that changing the
+  # interface (name) does not change the wintitle or prompt strings. Those are
+  # both based upon the (invariant) data source name.
+  SqrlFace(interface, uibody)
+
+  # Register that assignment within the data source's cache. Again, this does
+  # not alter the (data source name based) wintitle or prompt strings.
+  SqrlParam(datasource, "interface", interface)
+
+  # Return the name of the new user-interface function (invisibly).
+  return(invisible(interface))
+}
+
+SqrlIsOpen <- function(datasource = "",
+                        besure = FALSE)
+{
+  # Tests whether or not an open ODBC channel exists to the data source.
+  # Args:
+  #   datasource : The name of a data source.
+  #   besure     : Check thoroughly (ping the source) when this is set to TRUE.
+  # Returns:
+  #   TRUE if the data source exists, and SQRL has an open channel to it.
+  #   FALSE, otherwise.
+  # SQRL Calls:
+  #   SqrlClose(), SqrlParam(), SqrlPing(), SqrlTry().
+  # RODBC Calls:
+  #   odbcGetInfo().
+  # SQRL Callers:
+  #   SqrlDelegate(), SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(),
+  #   SqrlSubmit().
+  # User:
+  #   Has no direct access, and is unable to indirectly supply either argument.
+  #   Argument validity checks are not required.
+
+  # Attempt to obtain the channel parameter value for the specified data source.
+  channel <- SqrlTry(SqrlParam(datasource, "channel"), warn = FALSE)
+
+  # Return FALSE when the datasource is invalid (does not exist => is not open).
+  if (channel$error)
+  {
+    return(FALSE)
+  }
+
+  # Isolate the value of the channel parameter (strip the SqrlTty() error flag).
+  channel <- channel$value
+
+  # Return FALSE when the channel is closed (and we knew that).
+  if (is.null(channel))
+  {
+    return(FALSE)
+  }
+
+  # Return FALSE when the channel is not an RODBC handle (in which case we may
+  # have mistakenly thought the channel was open, since it was non-null valued).
+  if (!identical(class(channel), "RODBC"))
+  {
+    SqrlClose(datasource)
+    return(FALSE)
+  }
+
+  # Attempt to obtain channel information. This will fail if the channel has
+  # been closed from our end, or is not of RODBC class (repeating, in effect,
+  # the test above), but will succeed if the channel has been closed from the
+  # other end (and we were previously unaware of that).
+  info <- SqrlTry(RODBC::odbcGetInfo(channel), warn = FALSE)
+
+  # Return FALSE when the channel is closed (but we thought it was open).
+  if (info$error)
+  {
+    SqrlClose(datasource)
+    return(FALSE)
+  }
+
+  # When besure is FALSE (the default), we only check openness from our end.
+  # That being the case, return TRUE if we get to this point (the channel
+  # appears to be open from our end) and we're not going to be more thorough.
+  if (!besure)
+  {
+    return(TRUE)
+  }
+
+  # Otherwise (when we want to be thorough), ping the source to make sure.
+  # If the ping succeeds, the connection must be open.
+  if (SqrlPing(datasource))
+  {
+    return(TRUE)
+  }
+
+  # The ping failed; the connection is not open after all (has been dropped at
+  # the source's end). Formally close it at this end, before returning the
+  # openness status (FALSE).
+  SqrlClose(datasource)
+  return(FALSE)
+}
+
+SqrlOff <- function()
+{
+  # Close SQRL channels, deactivate SQRL.
+  # Args:
+  #   None.
+  # Returns:
+  #   Invisible NULL, after closing channels and detaching SQRL.
+  # SQRL Calls:
+  #   SqrlCache(), SqrlClose(), SqrlInterface(), SqrlTry().
+  # RODBC Calls:
+  #   odbcCloseAll().
+  # SQRL Callers:
+  #   sqrlOff().
+  # User:
+  #   User has no direct access, and there are no arguments.
+
+  # SQRL data sources correspond to child environments of srqlHaus. For each
+  # of these, close any open channel, remove any interface, and delete any data
+  # within the source cache (may contain passwords and so on). The garbage
+  # collector ought to take care of the cached data after we detach srqlHaus,
+  # but it's best to be immediate and sure. Operations are wrapped in silent
+  # try(), because we don't want one hiccup to block any other activity.
+  for (datasource in SqrlCache("*"))
+  {
+    SqrlTry(SqrlClose(datasource), warn = FALSE)
+    SqrlTry(SqrlInterface(datasource, "remove"), warn = FALSE)
+    cache <- SqrlCache(datasource)
+    SqrlTry(remove(list = objects(pos = cache, all.names = TRUE), pos = cache),
+            warn = FALSE)
+  }
+
+  # Detach the public SQRL:Face (interfaces) environment. The garbage collector
+  # should handle the rest. Again, wrapped in try() so that a failure here won't
+  # have knock-on effects.
+  SqrlTry(detach("SQRL:Face"), warn = FALSE)
+
+  # Detach and unload the SQRL package. The .onUnload() function attempts to
+  # detach SQRL:Face once again (but this doesn't matter).
+  SqrlTry(detach("package:SQRL", unload = TRUE), warn = FALSE)
+
+  # Return invisible NULL.
+  return(invisible(NULL))
+}
+
+SqrlOpen <- function(datasource = "")
+{
+  # Opens a channel to a data source.
+  # Args:
+  #   datasource : The name of a data source.
+  # Returns:
+  #   Invisible NULL, after creating and caching the data source channel.
+  #   Will throw a fatal exception should the connection attempt fail.
+  # SQRL Calls:
+  #   SqrlIsOpen(), SqrlParam(), SqrlParams(), SqrlPing(), SqrlTry().
+  # RODBC Calls:
+  #   odbcConnect(), odbcDriverConnect()
+  # SQRL Callers:
+  #   SqrlDelegate(), SqrlSubmit().
+  # User:
+  #   Has no direct access. Is unable to supply the only argument.
+  #   Argument validity checks are not required.
+
+  # If an open channel already exists, do not attempt to open another.
+  if (SqrlIsOpen(datasource, besure = TRUE))
+  {
+    return(invisible(NULL))
+  }
+
+  # RODBC will prompt the user (via dialog box) for missing information (uid,
+  # pwd, etc.) only in Rgui. In Rterm, RStudio, etc., pwd must be contained in
+  # the DSN or connection string, or the pwd parameter must be set, prior to
+  # attempting to connect. Otherwise, a (connection failure) error will result.
+
+  # If a connection string has been defined for this source, connect using that.
+  connection <- as.character(SqrlParam(datasource, "connection"))
+  if (nchar(connection) > 0L)
+  {
+    for (param in SqrlParams("substitutable"))
+    {
+      connection <- gsub(paste0("<", param, ">"), SqrlParam(datasource, param),
+                         connection, fixed = TRUE)
+    }
+    channel <- SqrlTry(
+                RODBC::odbcDriverConnect(
+                  connection = connection,
+                  case = SqrlParam(datasource, "case"),
+                  believeNRows = SqrlParam(datasource, "believeNRows"),
+                  colQuote = SqrlParam(datasource, "colQuote"),
+                  tabQuote = SqrlParam(datasource, "tabQuote"),
+                  interpretDot = SqrlParam(datasource, "interpretDot"),
+                  DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
+                  rows_at_time = SqrlParam(datasource, "rows_at_time"),
+                  readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
+
+  # Otherwise (no string), connect using the registered data source name (DSN).
+  } else
+  {
+    # If a user-ID and/or password has been defined, use the defined value (this
+    # overrides any corresponding value that may be defined within the DSN).
+    # Otherwise, use '' (rather than the default values), which causes RODBC to
+    # go with any values in the DSN (and to ask for missing values in Rgui).
+    # We can't just send the default values, because these will override any
+    # corresponding values on the DSN (which is unlikely to be the preferred
+    # behaviour). We do still want a non-empty default user-id, since this is
+    # useful when connecting via a string incorporating the <uid> placeholder.
+    uid <- ""
+    pwd <- ""
+    if (SqrlParam(datasource, "uid", isdefined = TRUE))
+    {
+      uid <- SqrlParam(datasource, "uid")
+    }
+    if (SqrlParam(datasource, "pwd", isdefined = TRUE))
+    {
+      pwd <- SqrlParam(datasource, "pwd")
+    }
+    channel <- SqrlTry(
+                RODBC::odbcConnect(
+                  dsn = SqrlParam(datasource, "dsn"),
+                  uid = uid,
+                  pwd = pwd,
+                  case = SqrlParam(datasource, "case"),
+                  believeNRows = SqrlParam(datasource, "believeNRows"),
+                  colQuote = SqrlParam(datasource, "colQuote"),
+                  tabQuote = SqrlParam(datasource, "tabQuote"),
+                  interpretDot = SqrlParam(datasource, "interpretDot"),
+                  DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
+                  rows_at_time = SqrlParam(datasource, "rows_at_time"),
+                  readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
+  }
+
+  # Halt and notify on failure to connect. Might just be an incorrect password,
+  # but could also be a network or server outage, etc. Fatal error, regardless.
+  # When RODBC::odbcConnect or RODBC::odbcDriverConnect encounter a failure to
+  # connect, they do not stop with an error message, but instead return -1 and
+  # throw warning messages with the details.
+  if (channel$error
+      || !identical(class(channel$value), "RODBC"))
+  {
+    stop("Connection attempt failed.")
+  }
+
+  # Looks like a valid connection channel was established. Record handle.
+  channel <- SqrlParam(datasource, "channel", channel$value)
+
+  # Double-check. If the connection attempt was unsuccessful, halt and notify.
+  if (!SqrlIsOpen(datasource))
+  {
+    stop("Connection attempt failed.")
+  }
+
+  # Scrape uid, dsn, and driver from the channel's connection attribute (in case
+  # the user should have entered something new). Mis-scraping will not kill the
+  # open channel, but it will produce an incorrect view in SqrlConfig(), and
+  # will prevent network drop-out recovery in SqrlSubmit(). We blank the uid
+  # parameter first, because if it does not appear in the channel's connection
+  # string, then it could be anything (when contained within a DSN, perhaps).
+  SqrlParam(datasource, "uid", "", override = TRUE)
+  cstring <- attr(channel, "connection.string")
+  cstrings <- unlist(strsplit(cstring, ';'))
+  for (param in SqrlParams("scrapeable-channel"))
+  {
+    pattern <- paste0("^", param, "=")
+    matches <- grepl(pattern, cstrings, ignore.case = TRUE)
+    if (any(matches))
+    {
+      index <- which(matches)[1L]
+      value <- trimws(sub(pattern, "", cstrings[index], ignore.case = TRUE))
+      SqrlParam(datasource, param, trimws(gsub("^\\{|\\}$", "", value)),
+                override = TRUE)
+    }
+  }
+
+  # If no ping has been defined for this data source, attempt to find (set) one.
+  if (is.null(SqrlParam(datasource, "ping")))
+  {
+    SqrlPing(datasource, set = TRUE)
+  }
+
+  # Return invisible NULL.
+  return(invisible(NULL))
+}
+
+SqrlParam <- function(datasource = "",
+                      parameter = "",
+                      set,
+                      override = FALSE,
+                      isdefined = NULL)
+{
+  # Gets and sets named SQRL/RODBC control parameters for a data source.
+  # Args:
+  #   datasource : The name of a known (to SQRL) data source.
+  #   parameter  : The name of a SQRL or RODBC control parameter.
+  #   set        : The value to assign to that parameter (optional).
+  #   override   : If set to TRUE, open status does not block value changes.
+  #   isdefined  : If set to TRUE, return whether or not a value is defined.
+  # Returns:
+  #   The value of the named parameter for the named data source. If the set
+  #   argument is specified, then the new value is returned (invisibly) after
+  #   its assignment to the parameter (new passwords are not returned).
+  # SQRL Calls:
+  #   SqrlCache(), SqrlDefault(), SqrlIndicator(), SqrlInterface(),
+  #   SqrlIsOpen(), SqrlParam() (self), SqrlParams().
+  # RODBC Calls:
+  #   odbcDataSources().
+  # SQRL Callers:
+  #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefault(), SqrlDelegate(),
+  #   SqrlDSNs(), SqrlParse(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(),
+  #   SqrlOpen(), SqrlParam() (self), SqrlPing(), SqrlProc(), SqrlShell(),
+  #   SqrlStatement(), SqrlSource(), SqrlSubmit(), SqrlSubScript(),
+  #   SqrlStatement(), SqrlValue(), sqrlInterface().
+  # User:
+  #   Has no direct access, but is able to supply (only) parameter and set via
+  #   SqrlDelegate() and/or SqrlConfig(), by way of SqrlValue(). SqrlDelegate()
+  #   vets parameter while the SqrlConfig() does not (although it will restrict
+  #   parameter to being a string, and is write-only). Neither vets set, and
+  #   that must be performed here. (SqrlValue() merely passes-through.)
+
+  # Obtain a handle to the data source's SQRL cache.
+  cacheenvir <- SqrlCache(datasource)
+
+  # When the defined flag is either TRUE or FALSE, return only whether or not a
+  # (default-overriding) value has been set (exists) for the parameter.
+  if (!is.null(isdefined))
+  {
+    if (exists("pstack", cacheenvir, inherits = FALSE))
+    {
+      ps <- get("pstack", cacheenvir, inherits = FALSE)
+      return(exists(parameter, ps[[length(ps)]], inherits = TRUE) == isdefined)
+    }
+    return(exists(parameter, cacheenvir, inherits = FALSE) == isdefined)
+  }
+
+  # When the parameter is 'reset', the set argument should be a vector of
+  # parameter names for which the default values are to be restored.
+  if (identical(parameter, "reset"))
+  {
+    # Coerce parameters to a character vector (sort() doesn't handle lists).
+    set <- as.character(unlist(set))
+
+    # Retain only those (unique) parameter names that are in the official list.
+    params <- sort(unique(set[set %in% SqrlParams("all")]))
+
+    # If we are left with no parameters to reset, return invisible NULL.
+    if (length(params) < 1L)
+    {
+      return(invisible(NULL))
+    }
+
+    # Construct a named list of the default values for those parameters.
+    news <- vector(mode(list()), length(params))
+    names(news) <- params
+    for (param in params)
+    {
+      news[param] <- list(SqrlDefault(datasource, param))
+    }
+
+    # Retain only those parameters for which a value has been set. Any others
+    # must necessarily already be at their defaults (resetting does nothing).
+    params <- params[params %in% SqrlParam(datasource, "*")]
+
+    # When all parameters are at their defaults, invisibly return them.
+    if (length(params) < 1L)
+    {
+      return(invisible(news))
+    }
+
+    # Abort if any of the supplied parameters are write-protected ('name')
+    # or read-only ('channel').
+    if (any(params %in% SqrlParams("write-protected"))
+        || any(params %in% SqrlParams("read-only")))
+    {
+      stop("Cannot reset protected parameter.")
+    }
+
+    # If the connection is open, we cannot reset any locked-while-open
+    # parameters (abort if such a request has been made), and we must also
+    # change any visible indicators (if those parameters are to be reset).
+    # This is a bit of a kludge; here we set any visible indicators to values
+    # that are identical to their defaults, then (later, below) we remove those
+    # set values, leaving the actual defaults in place.
+    if (SqrlIsOpen(datasource))
+    {
+      if (!override
+          && any(params %in% SqrlParams('locked-while-open')))
+      {
+        stop("Cannot reset parameter while connection is open.")
+      }
+      if ("visible" %in% params)
+      {
+        SqrlParam(datasource, "visible",
+                  SqrlDefault(datasource, "visible"), override)
+      }
+      if (SqrlParam(datasource, "visible"))
+      {
+        if ("prompt" %in% params)
+        {
+          SqrlParam(datasource, "prompt",
+                    SqrlDefault(datasource, "prompt"), override)
+        }
+        if ("wintitle" %in% params)
+        {
+          SqrlParam(datasource, "wintitle",
+                    SqrlDefault(datasource, "wintitle"), override)
+        }
+      }
+    }
+
+    # Interface removal is a special case, handled by SqrlInterface().
+    # Failure to re-apply the original (default) interface is non-fatal.
+    if ("interface" %in% params)
+    {
+      SqrlInterface(datasource, "remove")
+      SqrlInterface(datasource, datasource, vital = FALSE)
+      news["interface"] <- list(SqrlParam(datasource, "interface"))
+      params <- params[params != "interface"]
+      if (length(params) < 1L)
+      {
+        return(invisible(news))
+      }
+    }
+
+    # Remove the parameter-value definitions (restores default values).
+    remove(list = params, pos = cacheenvir)
+
+    # Invisibly return the new parameter-values (i.e., their defaults). Default
+    # values are never secret or semi-secret, so these can go back to the user.
+    return(invisible(news))
+  }
+
+  # When no value is supplied for the set argument, act as a getter.
+  if (missing(set))
+  {
+    # Obtain the temporary parameter-values (environments) stack (a list).
+    pstack <- if (exists("pstack", cacheenvir, inherits = FALSE))
+              {
+                get("pstack", cacheenvir, inherits = FALSE)
+              } else
+              {
+                SqrlDefault(datasource, "pstack")
+              }
+
+    # If the stack itself was sought, return it.
+    if (parameter == "pstack")
+    {
+      return(pstack)
+    }
+
+    # Otherwise, extract the last environment from the temporary-values stack.
+    # This inherits from the previous environment (and so on, to the first).
+    pstack <- pstack[[length(pstack)]]
+
+    # When there is no set value (temporary or cached) for the parameter,
+    # return its default. Default values are never secret or semi-secret.
+    if (!exists(parameter, pstack, inherits = TRUE))
+    {
+      return(SqrlDefault(datasource, parameter))
+    }
+
+    # Take care with regard to whom we supply secret parameter values.
+    if (parameter %in% SqrlParams("secret"))
+    {
+      # If we don't see an internal call of this function (i.e., it appears to
+      # have been called from outside of the namespace), return the default.
+      calls <- gsub("\\(.*", "", .traceback(0L))
+      i <- which(calls == "SqrlParam")
+      if (length(i) < 1L)
+      {
+        return(SqrlDefault(datasource, parameter))
+      }
+
+      # Likewise, if we don't see who called this function, return the default.
+      i <- max(i) + 1L
+      if (i > length(calls))
+      {
+        return(SqrlDefault(datasource, parameter))
+      }
+
+      # If the caller is aware, return either the default value (if such has
+      # been set) or a dummy value (when some non-default value has been set).
+      if (calls[i] %in% SqrlParams("aware"))
+      {
+        value <- get(parameter, pstack, inherits = TRUE)
+        if (identical(value, SqrlDefault(datasource, parameter)))
+        {
+          return(value)
+        }
+        return("*")
+      }
+
+      # If the caller is neither aware nor informed, return the default value.
+      if (!(calls[i] %in% SqrlParams("informed")))
+      {
+        return(SqrlDefault(datasource, parameter))
+      }
+
+    # Take care with regard to whom we supply semi-secret parameter values.
+    } else if (parameter %in% SqrlParams("semi-secret"))
+    {
+      # If we don't see an internal call of this function (i.e., it appears to
+      # have been called from outside of the namespace), return the default.
+      calls <- gsub("\\(.*", "", .traceback(0L))
+      i <- which(calls == "SqrlParam")
+      if (length(i) < 1L)
+      {
+        return(SqrlDefault(datasource, parameter))
+      }
+
+      # Likewise, if we don't see who called this function, return the default.
+      i <- max(i) + 1L
+      if (i > length(calls))
+      {
+        return(SqrlDefault(datasource, parameter))
+      }
+
+      # If the caller is neither aware nor informed, return the default value.
+      if (!(calls[i] %in% c(SqrlParams("aware"), SqrlParams("informed"))))
+      {
+        return(SqrlDefault(datasource, parameter))
+      }
+    }
+
+    # The parameter is not secret, or the caller is allowed to know its value.
+    # Return the current (temporary or cached) value.
+    return(get(parameter, pstack, inherits = TRUE))
+  }
+
+  # The set argument has been supplied; act as a setter (cache and return).
+  # First, we coerce the raw value to the expected type for the parameter.
+
+  # Normal action is to set the permanent value of the named parameter.
+  istemp <- FALSE
+  targetenvir <- cacheenvir
+
+  # However, if the parameter is 'pstack' and the set value is named, then this
+  # is reinterpreted as a request to assign a temporary value (value-of-set) for
+  # the named parameter (name-of-set) into the most recent environment of the
+  # temporary values stack (pstack).
+  if ((parameter == "pstack")
+      && !is.null(names(set)))
+  {
+    parameter <- names(set)
+    set <- set[[1L]]
+    istemp <- TRUE
+    pstack <- SqrlParam(datasource, "pstack")
+    targetenvir <- pstack[[length(pstack)]]
+    if ((length(parameter) != 1L)
+        || !(parameter %in% SqrlParams("all")))
+    {
+      stop("Unrecognised parameter for temporary assignment.")
+    }
+    if (parameter %in% SqrlParams("no-temp-allowed"))
+    {
+      stop("Parameter does not support temporary values.")
+    }
+  }
+
+  # In the special case where the parameter is (still) 'pstack', we have a
+  # request to expand or contract the temporary-values environments stack.
+  # If contracting the stack would remove a temporary ping and leave the
+  # channel open without a ping in the stack, then the temporary ping is
+  # retained (copied to the stack level below).
+  if (parameter == "pstack")
+  {
+    pstack <- SqrlParam(datasource, parameter)
+    ptop <- length(pstack)
+    if (set == "expand")
+    {
+      pstack <- append(pstack, new.env(parent = pstack[[ptop]]))
+    } else if (length(pstack) >= 2L)
+    {
+      tpars <- objects(pstack[[ptop]])
+      if (("ping" %in% tpars)
+          && !SqrlParam(datasource, "autoclose")
+          && SqrlIsOpen(datasource, besure = FALSE)
+          && (!exists("ping", pstack[[ptop - 1L]], inherits = TRUE)
+              || !nzchar(get("ping", pstack[[ptop - 1L]], inherits = TRUE))))
+      {
+        assign("ping", get("ping", pstack[[ptop]]), pstack[[ptop - 1L]])
+      }
+      verbose <- interactive() && SqrlParam(datasource, "verbose")
+      remove(list = tpars, pos = pstack[[ptop]])
+      pstack <- pstack[-ptop]
+      if ((length(tpars) > 0L)
+          && verbose)
+      {
+        cat("\n")
+        for (tpar in tpars)
+        {
+          rval <- deparse(SqrlParam(datasource, tpar))
+          cat("Reverting:", tpar, "=", rval, "\n")
+        }
+        cat("\n")
+      }
+    }
+    assign(parameter, pstack, cacheenvir)
+    return(invisible(set))
+  }
+
+  # In the special case where the connection parameter has been specified as a
+  # character vector of named and/or unnamed elements, we collapse that vector
+  # to a single (connection) string. Where present, the vector element names
+  # become the connection-parameter names within the string.
+  if ((parameter == "connection")
+      && identical(class(set), class(character()))
+      && (length(set) > 0L)
+      && !any(is.na(set)))
+  {
+    if (is.null(names(set))
+        || !any(nzchar(names(set))))
+    {
+      set <- paste0(set, collapse = ";")
+    } else
+    {
+      set <- paste0(names(set), c("", "=")[nzchar(names(set)) + 1L], set,
+                    collapse = ";")
+    }
+  }
+
+  # Nullable-string parameters are string-types which accept a set value of NULL
+  # as an alias for the empty string.
+  if ((parameter %in% SqrlParams("nullable-string"))
+      && is.null(set))
+  {
+    set <- ""
+  }
+
+  # Coerce set to the appropriate data type for the specified parameter.
+  # Firstly, the channel parameter can be either NULL, or of RODBC class.
+  # This can be set frequently, when the autoclose parameter value is TRUE.
+  if (parameter %in% SqrlParams("rodbc/null-type"))
+  {
+    if (!is.null(set)
+        && !identical(class(set), "RODBC"))
+    {
+      stop("New parameter value is not a connection handle.")
+    }
+
+  # Parameters that are (non-NA) character-strings. (These include all the
+  # scrapeable-channel parameters that may be set with each new channel.)
+  } else if (parameter %in% SqrlParams("string-type"))
+  {
+    set <- suppressWarnings(as.character(set))
+    if ((length(set) != 1L)
+        || is.na(set))
+    {
+      stop("New parameter value is not a character string.")
+    }
+
+  # Parameters that are logically-valued.
+  } else if (parameter %in% SqrlParams("boolean-type"))
+  {
+    set <- suppressWarnings(as.logical(set))
+    if (!identical(set, TRUE)
+        && !identical(set, FALSE))
+    {
+      stop("New parameter value not a logical singleton.")
+    }
+
+  # Parameters that are integer-valued.
+  } else if (parameter %in% SqrlParams("integer-type"))
+  {
+    set <- suppressWarnings(as.integer(set))
+    if ((length(set) != 1L)
+        || is.na(set))
+    {
+      stop("New parameter value is not an integer.")
+    }
+
+  # The interface and ping parameters can be character-valued or null-valued.
+  # Changing the interface parameter value does not change the interface.
+  } else if (parameter %in% SqrlParams("string/null-type"))
+  {
+    if (!is.null(set))
+    {
+      set <- suppressWarnings(as.character(set))
+      if ((length(set) != 1L)
+          || is.na(set))
+      {
+        stop("New parameter value is not a character string.")
+      }
+    }
+
+  # The na.strings parameter is a character vector of any length, including 0.
+  } else if (parameter %in% SqrlParams("character-type"))
+  {
+    set <- suppressWarnings(as.character(set))
+
+  # The as.is parameter can be a logical, numerical, or character vector.
+  } else if (parameter %in% SqrlParams("index-type"))
+  {
+    # This can be a logical (not NA), a natural number (integer or numeric
+    # form), a character string (valid name form), or a vector of the same.
+    # The integer and numeric classes are both of numeric mode.
+    if (!(is.logical(set)
+          || is.numeric(set)
+          || is.character(set))
+        || any(is.na(set)))
+    {
+      stop("Parameter must be of logical, numeric, or character type.")
+    }
+
+  # The colQuote and tabQuote parameters can be either NULL, or character
+  # vectors of length 0, 1, or 2.
+  } else if (parameter %in% SqrlParams("quote-type"))
+  {
+    if (!is.null(set))
+    {
+      set <- suppressWarnings(as.character(set))
+      if ((length(set) > 2L)
+          || any(is.na(set)))
+      {
+        stop("New parameter value is not a quotation specifier.")
+      }
+    }
+
+  # The nullstring parameter is a character string, possibly NA_character_.
+  } else if (parameter %in% SqrlParams("string/na-type"))
+  {
+    set <- suppressWarnings(as.character(set))
+    if (length(set) != 1L)
+    {
+      stop("New parameter value is not a character string.")
+    }
+
+  # Values of the result and library parameters cannot be directly set by the
+  # user, but NULL is taken to mean remove the current value, which is allowed.
+  } else if (parameter %in% SqrlParams("nullable-internal"))
+  {
+    if (!(override
+          || is.null(set)))
+    {
+      stop("New parameter value is not NULL.")
+    }
+
+  # Prevent the user from assigning to any name that is not on SqrlParams()'s
+  # 'all' list. Internal functions may do so, provided the override flag is set.
+  } else if (!override)
+  {
+    stop("Unrecognised parameter.")
+  }
+
+  # We have an acceptable value of set; so now act as a setter (below).
+  # No further modification of the value occurs, other than whitespace trimming
+  # for the prompt and wintitle parameters.
+
+  # Prevent overwriting (changing) the channel while it is open, with the
+  # exception that a channel can be nullified (dropped) at any time.
+  if ((parameter == "channel")
+      && exists(parameter, cacheenvir, inherits = FALSE)
+      && !is.null(set)
+      && SqrlIsOpen(datasource))
+  {
+    if (identical(set, SqrlParam(datasource, "channel")))
+    {
+      return(invisible(set))
+    }
+    stop("Channel cannot be changed while open.")
+  }
+
+  # Prevent changing write-protected parameter values.
+  if ((parameter %in% SqrlParams("write-protected"))
+      && exists(parameter, cacheenvir, inherits = FALSE))
+  {
+    if (identical(set, SqrlParam(datasource, parameter)))
+    {
+      return(invisible(set))
+    }
+    stop("Parameter is write-protected.")
+  }
+
+  # Prevent changing RODBC::odbcConnect() parameters while connection is open.
+  # (Because those changes would only take effect on opening a new channel.)
+  # The _default_ values of these 'locked-while-open' parameters cannot be
+  # changed while the connection is open. Hence, it is permissible to replace
+  # a currently default value with an identical static value at any time.
+  # The override condition allows SqrlOpen() to alter some of these (to values
+  # the user may have entered) when the connection channel is first opened.
+  if (!override
+      && (parameter %in% SqrlParams("locked-while-open"))
+      && SqrlIsOpen(datasource))
+  {
+    # This shouldn't ever happen, but just in case.
+    if (istemp)
+    {
+      stop(paste0("Cannot set a temporary value for the '", parameter,
+                  "' parameter."))
+    }
+    # Throw an error on an attempt to change the parameter value. Must also
+    # throw an error when attempting to set a secret or semi-secret parameter to
+    # the value it already has, or else the value could be discovered by trial
+    # and error.
+    if ((parameter %in% c(SqrlParams("secret"), SqrlParams("semi-secret")))
+        || !identical(set, SqrlParam(datasource, parameter)))
+    {
+      stop("Parameter is locked while a connection is open.")
+    }
+    # Otherwise, if the current value is a default (when no static value is
+    # defined), set the (identical) new value as an equivalent static
+    # replacement (for the default).
+    if (!exists(parameter, cacheenvir, inherits = FALSE))
+    {
+      assign(parameter, set, targetenvir)
+    }
+    # Return the (unchanged) value.
+    return(invisible(set))
+  }
+
+  # The channel parameter is a special case, because we want to toggle the
+  # indicator state along with a change of channel existence (null/not).
+  if (parameter == "channel")
+  {
+    # This shouldn't ever happen, but just in case.
+    if (istemp)
+    {
+      stop("Cannot set a temporary value for the 'channel' parameter.")
+    }
+    # Current value of the channel parameter. NULL is no channel (closed),
+    # anything else is we think the channel is open (it may or may not be).
+    current <- SqrlParam(datasource, "channel")
+    # No channel to channel; show indicators (conditional on settings, mode).
+    if (is.null(current)
+        && !is.null(set))
+    {
+      SqrlIndicator(datasource, "show")
+    # Channel to no channel; hide indicators (conditional on settings, mode)
+    } else if (!is.null(current)
+                && is.null(set))
+    {
+      SqrlIndicator(datasource, "hide")
+    }
+    # Set the new value. Return it invisibly.
+    assign(parameter, set, targetenvir)
+    return(invisible(set))
+  }
+
+  # The connection parameter is a special case, since we want to extract further
+  # parameter values from it, if we can. This may fail if any of the parameter
+  # values contain = or ;, but none of the test systems allow these characters
+  # in DSNs, passwords, etc. Does any system? See related 'scrape' comments
+  # within SqrlOpen().
+  if (parameter == "connection")
+  {
+    # This shouldn't ever happen, but just in case.
+    if (istemp)
+    {
+      stop("Cannot set a temporary value for the 'connection' parameter.")
+    }
+    # Unless the connection string contains a DSN placeholder ('<dsn>'),
+    # delete any dsn definition.
+    if (!grepl("<dsn>", set))
+    {
+      SqrlParam(datasource, "reset", "dsn", override)
+    }
+    # RODBC::odbcConnect() likes to know the driver (from which it determines
+    # whether or not it's dealing with MySQL). While we're doing that, we may as
+    # well attempt to extract some other parameter values, first. We make sure
+    # the driver parameter is done last, because setting a value for dsn sets
+    # driver as a side effect, and we may want to override that.
+    spars <- SqrlParams("scrapeable-string")
+    for (param in c(spars[spars != "driver"], spars[spars == "driver"]))
+    {
+      if (grepl(paste0(param, "\\s*="), set, ignore.case = TRUE))
+      {
+        assignee <- paste0("^.*", param, "\\s*=")
+        value <- sub(assignee, "", set, ignore.case = TRUE)
+        value <- trimws(sub(";.*$", "", value))
+        # 'user' and 'username' are connection string aliases for 'uid'.
+        if (param %in% SqrlParams("uid-aliases"))
+        {
+          param <- "uid"
+        # 'password' is a connection string alias for 'pwd'.
+        } else if (param %in% SqrlParams("pwd-aliases"))
+        {
+          param <- "pwd"
+        }
+        # SQRL accepts <uid> (etc.) as connection string template place holders
+        # (to be replaced with current values at connection time). We don't want
+        # to override default or previous values with these.
+        if (value != paste0("<", param, ">"))
+        {
+          SqrlParam(datasource, param, value, override)
+        }
+      }
+    }
+    # Set the (unaltered) connection string, return invisibly.
+    assign(parameter, set, targetenvir)
+    return(invisible(set))
+  }
+
+  # Setting the dsn parameter is a special case, because we simultaneously
+  # reset the connection parameter unless the connection string contains a
+  # '<dsn>' placeholder. If the DSN is defined on the local system, then we
+  # also set the driver parameter to the DSN's value, as obtained from
+  # RODBC::odbcDataSources().
+  if (parameter == "dsn")
+  {
+    if (istemp)
+    {
+      stop("Cannot set a temporary value for the 'dsn' parameter.")
+    }
+    if (!grepl("<dsn>", SqrlParam(datasource, "connection")))
+    {
+      SqrlParam(datasource, "reset", "connection", override)
+    }
+    assign(parameter, set, targetenvir)
+    sources <- RODBC::odbcDataSources("all")
+    if ((nzchar(set))
+          && (set %in% names(sources)))
+    {
+      SqrlParam(datasource, "driver", sources[set], override)
+    }
+    return(invisible(set))
+  }
+
+  # Setting the ping to NULL (its default value) is a special case enacted by
+  # deleting any existing value (leaving the default in effect). This simplifies
+  # finding valid pings in the (temporary parameter values) pstack.
+  if (is.null(set)
+      && (parameter == "ping"))
+  {
+    SqrlParam(datasource, "reset", parameter)
+    return(SqrlParam(datasource, parameter))
+  }
+
+  # The prompt and wintitle parameters are special cases, because, if the old
+  # prompt or wintitle is currently visible, it must be removed before changing
+  # the parameter value, and then the new value must be applied.
+  if (parameter %in% c("prompt", "wintitle"))
+  {
+    if (istemp)
+    {
+      stop(paste0("Cannot set a temporary value for the '", parameter,
+                  "' parameter."))
+    }
+    set <- trimws(set)
+    if (set != SqrlParam(datasource, parameter))
+    {
+      isopen <- SqrlIsOpen(datasource)
+      if (isopen)
+      {
+        SqrlIndicator(datasource, "hide", parameter)
+      }
+      assign(parameter, set, targetenvir)
+      if (isopen)
+      {
+        SqrlIndicator(datasource, "show", parameter)
+      }
+    }
+    return(invisible(set))
+  }
+
+  # The visible parameter is a special case, because, if the channel is open,
+  # both prompt and window title changes (addition or removal) must be made.
+  if (parameter == "visible")
+  {
+    if (istemp)
+    {
+      stop("Cannot set a temporary value for the 'visible' parameter.")
+    }
+    if (set != SqrlParam(datasource, "visible"))
+    {
+      isopen <- SqrlIsOpen(datasource)
+      if (isopen
+          && !set)
+      {
+        SqrlIndicator(datasource, "hide")
+      }
+      assign(parameter, set, targetenvir)
+      if (isopen
+          && set)
+      {
+        SqrlIndicator(datasource, "show")
+      }
+    }
+    return(invisible(set))
+  }
+
+  # The libstack parameter is a special case, because the set value is appended
+  # to the top layer of the existing stack (rather than replacing the stack).
+  if (parameter == "libstack")
+  {
+    # This shouldn't ever happen (unless the libstack storage mechanism is
+    # changed to having a library within each layer of the pstack stack), but
+    # we check here anyway, just in case.
+    if (istemp)
+    {
+      stop("Cannot alter procedures via <with>.")
+    }
+    # A NULL value is interpreted as a request to remove the stack.
+    if (is.null(set))
+    {
+      if (exists(parameter, cacheenvir, inherits = FALSE))
+      {
+        remove(list = parameter, pos = cacheenvir)
+      }
+      return(invisible())
+    }
+    # It is not possible to directly assign the lib[n][name] element within the
+    # cache environment, so we have to pull the stack pointer back here, modify
+    # the local copy, and then point the cache environment at this new copy.
+    lib <- SqrlParam(datasource, parameter)
+    # Unnamed strings are used as special stack-control values.
+    if (is.null(names(set)))
+    {
+      # When set is 'expand', add a new layer to the top of the stack (list).
+      if (set == "expand")
+      {
+        lib[[length(lib) + 1L]] <- character()
+      # Otherwise, set will be 'contract'; remove the top layer of the stack.
+      } else
+      {
+        lib[[length(lib)]] <- NULL
+      }
+    # Named strings are procedure definitions, to be added to the topmost layer
+    # of the stack.
+    } else
+    {
+      lib <- SqrlParam(datasource, parameter)
+      lib[[length(lib)]][names(set)] <- as.character(set)
+    }
+    assign(parameter, lib, cacheenvir)
+    return(invisible())
+  }
+
+  # The library parameter is a special case, because the set value is appended
+  # to the existing library (rather than replacing it).
+  if (parameter == "library")
+  {
+    # This shouldn't ever happen, but just in case.
+    if (istemp)
+    {
+      stop("Cannot alter library via <with>.")
+    }
+    # A NULL value is interpreted as a request to reset (empty) the library.
+    if (is.null(set))
+    {
+      return(SqrlParam(datasource, "reset", parameter))
+    }
+    # Otherwise, the value can only have come from SqrlParse(), and will be a
+    # named string (procedure definition). Add that definition to the library.
+    # It is not possible to directly assign the lib[name] element within the
+    # cache environment.
+    lib <- SqrlParam(datasource, parameter)
+    lib[names(set)] <- as.character(set)
+    lib <- lib[order(names(lib))]
+    assign(parameter, lib, cacheenvir)
+    return(invisible(set))
+  }
+
+  # For all other cases, set and (invisibly) return the new parameter value.
+  assign(parameter, set, targetenvir)
+  return(invisible(set))
+}
+
+SqrlParams <- function(group = "")
+{
+  # Returns any one of various useful parameter groupings.
+  # Args:
+  #   group : The (string) name (description) of a parameter group.
+  # Returns:
+  #   A character vector of the names of all parameters in the group.
+  # SQRL Calls:
+  #   None.
+  # SQRL Callers:
+  #   SqrlCache(), SqrlConfig(), SqrlDefile(), SqrlDelegate(), SqrlDSNs(),
+  #   SqrlParse(), SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(),
+  #   SqrlValue(), sqrlAll().
+  # User:
+  #   Has no direct access, and is unable to supply the argument. Validity
+  #   checks are not required.
+
+  # Parameter-group definitions (find and return).
+  return(switch(group,
+
+    # All public (user-visible) parameter names, whether RODBC or SQRL.
+    "all"                   = c("aCollapse",
+                                "as.is",
+                                "autoclose",
+                                "believeNRows",
+                                "buffsize",
+                                "case",
+                                "channel",
+                                "colQuote",
+                                "connection",
+                                "DBMSencoding",
+                                "dec",
+                                "driver",
+                                "dsn",
+                                "errors",
+                                "interface",
+                                "interpretDot",
+                                "lCollapse",
+                                "library",
+                                "max",
+                                "na.strings",
+                                "name",
+                                "nullstring",
+                                "ping",
+                                "prompt",
+                                "pwd",
+                                "readOnlyOptimize",
+                                "result",
+                                "retry",
+                                "rows_at_time",
+                                "scdo",
+                                "stringsAsFactors",
+                                "tabQuote",
+                                "uid",
+                                "verbose",
+                                "visible",
+                                "wintitle"),
+
+    # Functions (not parameters) allowed to know whether or not secrets exist.
+    "aware"                 = c("SqrlValue"),
+
+    # Parameters of Boolean-singleton type (TRUE/FALSE, not NA).
+    "boolean-type"          = c("autoclose",
+                                "believeNRows",
+                                "errors",
+                                "interpretDot",
+                                "readOnlyOptimize",
+                                "retry",
+                                "scdo",
+                                "stringsAsFactors",
+                                "verbose",
+                                "visible"),
+
+    # Parameters of character-vector type (any length, including zero).
+    "character-type"        = c("na.strings"),
+
+    # Parameters not to copy when duplicating an existing SQRL data source.
+    "don't-copy"            = c("channel",
+                                "interface",
+                                "libstack",
+                                "name",
+                                "prompt",
+                                "result",
+                                "wintitle"),
+
+    # Parameters of index type (logical, numerical, or character vectors).
+    "index-type"            = c("as.is"),
+
+    # Functions (not parameters) allowed to know secrets.
+    "informed"              = c("SqrlOpen",
+                                "SqrlSource"),
+
+    # Parameters of integer-singleton type (not NA).
+    "integer-type"          = c("buffsize",
+                                "max",
+                                "rows_at_time"),
+
+    # Parameters that cannot be changed while the connection channel is open.
+    "locked-while-open"     = c("believeNRows",
+                                "case",
+                                "colQuote",
+                                "connection",
+                                "DBMSencoding",
+                                "driver",
+                                "dsn",
+                                "interpretDot",
+                                "readOnlyOptimize",
+                                "rows_at_time",
+                                "tabQuote",
+                                "uid"),
+
+    # Parameters whose values are lists of named values.
+    "named-values"          = c("library"),
+
+    # Parameters for which temporary working values cannot be assigned.
+    "no-temp-allowed"       = c("autoclose",
+                                "channel",
+                                "interface",
+                                "library",
+                                "name",
+                                "prompt",
+                                "result",
+                                "visible",
+                                "wintitle"),
+
+    # Parameters the user can make NULL, but whose values are otherwise only
+    # settable by private SQRL functions.
+    "nullable-internal"     = c("library",
+                                "result"),
+
+    # String-type parameters that accept NULL as an alias for the empty string.
+    "nullable-string"       = c("connection",
+                                "DBMSencoding",
+                                "driver",
+                                "dsn",
+                                "prompt",
+                                "pwd",
+                                "uid",
+                                "wintitle"),
+
+    # Parameters that are omitted from the SqrlConfig() configuration list.
+    "omit-from-config"      = c("result"),
+
+    # Parameters to omit from the 'settings' subset of the configuration list.
+    "omit-from-settings"    = c("channel",
+                                "connection",
+                                "driver",
+                                "dsn",
+                                "library",
+                                "name",
+                                "ping",
+                                "pwd",
+                                "result",
+                                "uid"),
+
+    # Parameters that can be file-path valued (excluded from SqrlDefile()).
+    "path-valued"           = c("driver",
+                                "dsn",
+                                "library"),
+
+    # Aliases for 'pwd' (within the 'scrapeable-string' parameter set).
+    "pwd-aliases"           = c("password"),
+
+    # Parameters of quote type can be NULL, or character-vectors of length <= 2.
+    "quote-type"            = c("colQuote",
+                                "tabQuote"),
+
+    # Parameters that cannot be set (written) by the user.
+    "read-only"             = c("channel"),
+
+    # Parameters that are of RODBC type (can be NULL valued).
+    "rodbc/null-type"       = c("channel"),
+
+    # Parameters that can have their values scraped from an open channel object.
+    "scrapeable-channel"    = c("driver",
+                                "dsn",
+                                "uid"),
+
+    # Parameters that can have their values scraped from a connection string.
+    "scrapeable-string"     = c("driver",
+                                "dsn",
+                                "password",
+                                "pwd",
+                                "uid",
+                                "user",
+                                "username"),
+
+    # Parameters whose actual values are never returned to the user.
+    "secret"                = c("password",
+                                "pwd"),
+
+    # Parameters whose values may contain a secret component.
+    "semi-secret"           = c("connection"),
+
+    # Parameters appearing in the data source summary table, in table column
+    # order (not in alphabetical order).
+    "source-table"          = c("name",
+                                "interface",
+                                "open",
+                                "driver"),
+
+    # Keywords used for SQL script identification in SqrlDelegate().
+    "sql-keywords"          = c("select",
+                                "create",
+                                "drop",
+                                "update",
+                                "insert"),
+
+    # Parameters that are of character-string (singleton) type (non-NA).
+    "string-type"           = c("aCollapse",
+                                "case",
+                                "connection",
+                                "DBMSencoding",
+                                "dec",
+                                "driver",
+                                "dsn",
+                                "lCollapse",
+                                "name",
+                                "prompt",
+                                "pwd",
+                                "uid",
+                                "wintitle"),
+
+    # Parameters that are of character-string type, with NAs allowed.
+    "string/na-type"        = c("nullstring"),
+
+    # Parameters that are of string type, or else can be NULL valued.
+    "string/null-type"      = c("interface",
+                                "ping"),
+
+    # Parameters that can take template-form within a connection string.
+    "substitutable"         = c("driver",
+                                "dsn",
+                                "pwd",
+                                "uid"),
+
+    # Aliases for 'uid' (within the 'scrapeable-string' parameter set).
+    "uid-aliases"           = c("user",
+                                "username"),
+
+    # Names to filter-out when obtaining DSNs.
+    "unwanted-sources"      = c("Access",
+                                "dBASE",
+                                "Excel"),
+
+    # Parameters that are write-once (even by SQRL, not just the user).
+    "write-protected"       = c("name"),
+
+    # This should never happen.
+    stop("Unknown parameter group.")))
+}
+
+SqrlParse <- function(datasource = "",
                       script = "",
                       envir = parent.frame(),
                       params = NULL,
@@ -1399,8 +3397,8 @@ SqrlFile <- function(datasource = "",
   # Returns:
   #   Result of submitting the script.
   # SQRL Calls:
-  #   SqrlClose(), SqrlDelegate (via sqrl()), SqrlParam(), SqrlParams(),
-  #   SqrlPL(), SqrlStatement(), SqrlSubScript(), SqrlTry().
+  #   SqrlClose(), SqrlDefile(), SqrlDelegate (via sqrl()), SqrlParam(),
+  #   SqrlParams(), SqrlPL(), SqrlStatement(), SqrlSubScript(), SqrlTry().
   # utils Calls:
   #   head() (only if utils is attached).
   # SQRL Callers:
@@ -1496,7 +3494,7 @@ SqrlFile <- function(datasource = "",
   nchar.script <- nchar(script)
 
   # Create a new environment as a child of the invoking environment.
-  # SqrlFile() evaluates R expressions (including the post-processing) within
+  # SqrlParse() evaluates R expressions (including the post-processing) within
   # this environment (rather than the invoking environment) so as to avoid
   # overwriting variables within the invoking environment.
   sqrl.env <- new.env(parent = envir)
@@ -1655,9 +3653,9 @@ SqrlFile <- function(datasource = "",
       # Reposition the start-of-phrase index immediately after the end of the
       # comment. When the comment ends with a newline, the index is placed on
       # that newline (so that the next phrase will begin with the newline).
-      k <- ifelse(i <= num.delims,
-            ifelse(end.marker == "end.of.line", pos[i], pos[i] + len[i]),
-            nchar.script + 1L)
+      k <- if (i <= num.delims) {
+                if (end.marker == "end.of.line") {pos[i]} else {pos[i] + len[i]}
+                } else {nchar.script + 1L}
 
       # Advance to the next script delimiter.
       i <- i + 1L
@@ -1718,13 +3716,13 @@ SqrlFile <- function(datasource = "",
       # Unless within the block of an untrue conditional expression.
       if (cond.current)
       {
-        statement <- append(statement, ifelse(i <= num.delims,
-                                              substring(script, k, pos[i]),
-                                              substring(script, k)))
+        statement <- append(statement, if (i <= num.delims) {
+                                            substring(script, k, pos[i])
+                                            } else {substring(script, k)})
       }
 
       # Position the start-of-phrase index immediately after the closing quote.
-      k <- ifelse(i <= num.delims, pos[i] + len[i], nchar.script + 1L)
+      k <- if (i <= num.delims) {pos[i] + len[i]} else {nchar.script + 1L}
 
       # Advance to the next script delimiter.
       i <- i + 1L
@@ -2385,10 +4383,9 @@ SqrlFile <- function(datasource = "",
           # Reposition the start-of-phrase index immediately after the end of
           # the comment. When the comment ends with a newline, the index is
           # placed on that newline (the next phrase will begin with newline).
-          k <- ifelse(i <= num.delims,
-                      ifelse(end.marker == "end.of.line",
-                              pos[i], pos[i] + len[i]),
-                      nchar.script + 1L)
+          k <- if (i <= num.delims) {
+                if (end.marker == "end.of.line") {pos[i]} else {pos[i] + len[i]}
+                } else {nchar.script + 1L}
         }
 
         # Skip over (single, double) quote-enclosed strings (include verbatim).
@@ -2426,12 +4423,12 @@ SqrlFile <- function(datasource = "",
 
           # Append the quoted string literal to the R-script, without counting
           # any parentheses that may appear within it.
-          rscript <- append(rscript, ifelse(i <= num.delims,
-                                            substring(script, k, pos[i]),
-                                            substring(script, k)))
+          rscript <- append(rscript, if (i <= num.delims) {
+                                          substring(script, k, pos[i])
+                                          } else {substring(script, k)})
 
           # Position the start-of-phrase index just after the closing quote.
-          k <- ifelse(i <= num.delims, pos[i] + len[i], nchar.script + 1L)
+          k <- if (i <= num.delims) {pos[i] + len[i]} else {nchar.script + 1L}
         }
 
         # Upon finding an end-of-expression marker, establish whether or not it
@@ -2695,10 +4692,9 @@ SqrlFile <- function(datasource = "",
           # Reposition the start-of-phrase index immediately after the end of
           # the comment. When the comment ends with a newline, the index is
           # placed on that newline (the next phrase will begin with newline).
-          k <- ifelse(i <= num.delims,
-                      ifelse(end.marker == "end.of.line",
-                              pos[i], pos[i] + len[i]),
-                      nchar.script + 1L)
+          k <- if (i <= num.delims) {
+                if (end.marker == "end.of.line") {pos[i]} else {pos[i] + len[i]}
+                } else {nchar.script + 1L}
         }
 
         # Skip over any (single or double) quote-enclosed strings (include
@@ -2786,9 +4782,9 @@ SqrlFile <- function(datasource = "",
       if (cond.current)
       {
         # Append the final chunk to the R-script.
-        phrase <- ifelse(i <= num.delims,
-                          substring(script, k, pos[i] - 1L),
-                          substring(script, k))
+        phrase <- if (i <= num.delims) {
+                      substring(script, k, pos[i] - 1L)
+                      } else {substring(script, k)}
         rscript <- append(rscript, phrase)
 
         # Collapse the rscript (list) to a single string.
@@ -2877,7 +4873,7 @@ SqrlFile <- function(datasource = "",
       }
 
       # Reposition the start-of-phrase index immediately after this R section.
-      k <- ifelse(i <= num.delims, pos[i] + len[i], nchar.script + 1L)
+      k <- if (i <= num.delims) {pos[i] + len[i]} else {nchar.script + 1L}
 
       # Advance to the next script delimiter.
       i <- i + 1L
@@ -2935,9 +4931,9 @@ SqrlFile <- function(datasource = "",
           # Reposition the start-of-phrase index immediately after the end of
           # the comment. When the comment ends with a newline, the index is
           # placed on that newline (the next phrase will begin with newline).
-          k <- ifelse(i <= num.delims,
-                  ifelse(end.marker == "end.of.line", pos[i], pos[i] + len[i]),
-                  nchar.script + 1L)
+          k <- if (i <= num.delims) {
+                if (end.marker == "end.of.line") {pos[i]} else {pos[i] + len[i]}
+                } else {nchar.script + 1L}
         }
 
         # Skip over any (single or double) quote-enclosed strings (include
@@ -2970,9 +4966,9 @@ SqrlFile <- function(datasource = "",
       if (cond.current)
       {
         # Append the final chunk to the withs-script.
-        phrase <- ifelse(i <= num.delims,
-                          substring(script, k, pos[i] - 1L),
-                          substring(script, k))
+        phrase <- if (i <= num.delims) {
+                      substring(script, k, pos[i] - 1L)
+                      } else {substring(script, k)}
         withs <- append(withs, phrase)
 
         # Collapse the withs-script (list) to a single string.
@@ -3029,6 +5025,12 @@ SqrlFile <- function(datasource = "",
               stop("Parameter does not accept temporary values.")
             }
 
+            # Allow temporary parameter values to be read from file.
+            if (!(w.par %in% SqrlParams("path-valued")))
+            {
+              w.val[[1L]] <- SqrlDefile(w.par, w.val[[1L]])
+            }
+
             # Attempt to set the temporary parameter value.
             SqrlParam(datasource, "pstack", w.val)
 
@@ -3058,7 +5060,7 @@ SqrlFile <- function(datasource = "",
       }
 
       # Reposition the start-of-phrase index immediately after this section.
-      k <- ifelse(i <= num.delims, pos[i] + len[i], nchar.script + 1L)
+      k <- if (i <= num.delims) {pos[i] + len[i]} else {nchar.script + 1L}
 
       # Advance to the next script delimiter.
       i <- i + 1L
@@ -3096,7 +5098,7 @@ SqrlFile <- function(datasource = "",
       }
 
       # Reposition the start-of-phrase index immediately after this tag.
-      k <- ifelse(i <= num.delims, pos[i] + len[i], nchar.script + 1L)
+      k <- if (i <= num.delims) {pos[i] + len[i]} else {nchar.script + 1L}
 
       # Advance to the next script delimiter.
       i <- i + 1L
@@ -3156,1915 +5158,9 @@ SqrlFile <- function(datasource = "",
   return(result$value)
 }
 
-SqrlHelp <- function(datasource = "",
-                      type = "",
-                      clean = FALSE)
-{
-  # Generates run-time help for SQRL interface functions.
-  # Args:
-  #   datasource : The name of a known data source.
-  #   type       : The requested help format ('text' or 'html').
-  #   clean      : If set to TRUE, any old temp files are removed.
-  # Returns:
-  #   Invisible NULL, after displaying help.
-  # SQRL Calls:
-  #   SqrlConfig(), SqrlHelp() (self), SqrlHelper(), SqrlPath(), SqrlTry(),
-  #   srqlHelp.
-  # tools Calls:
-  #   Rd2HTML(), Rd2txt() (only if the tools package is installed).
-  # utils Calls:
-  #   browseURL(), help() (only if utils is attached).
-  # SQRL Callers:
-  #   SqrlDelegate(), SqrlHelp() (self), .onLoad(), .onUnload().
-  # User:
-  #   Has no direct access, but is able to submit (only) the 'type' argument.
-  #   That is coerced to an allowed value, and no further checks are required.
-
-  # If the clean argument was set, prune any old temp files and return the temp
-  # files list (after creating an empty list if the list does not yet exist).
-  if (clean)
-  {
-    if (!exists("temps", srqlHelp, inherits = FALSE))
-    {
-      return(assign("temps", character(0L), srqlHelp))
-    }
-    temps <- get("temps", srqlHelp, inherits = FALSE)
-    temps <- temps[file.exists(temps)]
-    temps <- temps[!suppressWarnings(file.remove(temps))]
-    return(assign("temps", temps, srqlHelp))
-  }
-
-  # Unless a supported help type was supplied, use the default help type.
-  # This may be NULL valued. Types are not case sensitive.
-  type <- tolower(type)
-  if (!identical(type, "text")
-      && !identical(type, "html"))
-  {
-    type <- tolower(getOption("help_type"))
-  }
-
-  # If the utils package (which provides the help() function) is not loaded,
-  # print a link to the CRAN SQRL page (which has a PDF help file), and return.
-  if (!("package:utils" %in% search()))
-  {
-    return(cat("https://CRAN.R-project.org/package=SQRL\n"))
-  }
-
-  # If the tools package (which converts Rd files) is unavailable, display the
-  # pre-built (static) interface-usage help page, and return.
-  if (length(find.package("tools", quiet = TRUE)) == 0L)
-  {
-    return(utils::help("sqrlUsage", help_type = type))
-  }
-
-  # The tools package is available. We shall dynamically generate tailored help
-  # for the invoking (data source's) interface function. This involves temp
-  # files. Remove any existing SQRL temp files (from any prior SqrlHelp() call).
-  temps <- SqrlHelp(clean = TRUE)
-
-  # Obtain the current source configuration (all parameter values).
-  config <- SqrlConfig(datasource)
-
-  # Extract the driver from the configuration, and escape any % characters
-  # (these are the Rd comment symbol, even with \preformatted{} sections).
-  if (grepl("[[:graph:]]", config[["driver"]]))
-  {
-    driver <- paste0("\\file{", SqrlHelper(config[["driver"]]), "}")
-  } else
-  {
-    driver <- "unknown or undefined"
-  }
-
-  # Extract and escape the data source's (SQRL) name.
-  if (identical(config[["name"]], config[["interface"]]))
-  {
-    dsrc <- "of the same name"
-  } else
-  {
-    dsrc <- paste0("\\file{", SqrlHelper(config[["name"]]), "}")
-  }
-
-  # Establish the channel status, and choose the appropriate phrase.
-  if (is.null(config[["channel"]]))
-  {
-    ochan <- "closed"
-  } else
-  {
-    ochan <- "open"
-  }
-
-  # Construct example queries, appropriate to the source's driver.
-  if (grepl("oracle|db2", driver, ignore.case = TRUE))
-  {
-    query1 <- "select 1 from dual"
-    query2 <- "\"select \", sample(6, 1), \" from dual\""
-  } else
-  {
-    query1 <- "select 1"
-    query2 <- "\"select \", sample(6, 1)"
-  }
-
-  # Extract and escape the interface function's name.
-  iface <- SqrlHelper(config[["interface"]])
-
-  # Escape and list all of the parameter values.
-  csc <- character(0L)
-  config <- SqrlHelper(config)
-  for (name in names(config))
-  {
-    csc <- c(csc, paste(name, "=", config[[name]]))
-  }
-
-  # Construct the help text, in Rd (R man file) format. We don't gsub() on tags
-  # in case the one of the parameter values happens to contain that sequence.
-  helprd <- c(
-    paste0("\\name{", iface, "}"),
-    paste0("\\title{ODBC Interface Function \\sQuote{", iface, "}}"),
-    "\\description{",
-    paste0("The function \\code{", iface, "} is"),
-    paste0("the interface to the data source ", dsrc,"."),
-    paste0("The \\acronym{ODBC} driver is ", driver, "."),
-    paste0("Communications are ", ochan, "."),
-    "}",
-    "\\section{Listing Sources}{\\preformatted{",
-    "# View the associated source definition.",
-    paste0(iface, "(\"source\")"),
-    "",
-    "# See all data sources and their interfaces.",
-    paste0(iface, "(\"sources\")"),
-    "}}",
-    "\\section{Opening and Closing}{\\preformatted{",
-    "# Open a connection to the data source.",
-    paste0(iface, "()"),
-    "",
-    "# Check if the connection is open.",
-    paste0(iface, "(\"isopen\")"),
-    "",
-    "# Close the connection.",
-    paste0(iface, "(\"close\")"),
-    "",
-    "# Close the connection when not in use.",
-    paste0(iface, "(autoclose = TRUE)"),
-    "}}",
-    "\\section{Submitting Queries}{\\preformatted{",
-    "# Submit a query.",
-    paste0(iface, "(\"", query1, "\")"),
-    "",
-    "# Submit a compound query.",
-    paste0(iface, "(", query2, ")"),
-    "",
-    "# Submit a query from file.",
-    paste0(iface, "(\"my/file.sql\")"),
-    "",
-    "# Submit a parameterised query from file.",
-    paste0(iface, "(\"rhaphidophoridae.sqrl\", genus = \"gymnoplectron\")"),
-    "",
-    "# Force submission as a query.",
-    paste0(iface, "(query = \"help\")"),
-    "}}",
-    "\\section{Communication Parameters}{\\preformatted{",
-    "# Get a named parameter value.",
-    paste0(iface, "(\"uid\")"),
-    "",
-    "# Set a named parameter value.",
-    paste0(iface, "(visible = TRUE)"),
-    "",
-    "# Reset a parameter to its default value.",
-    paste0(iface, "(reset = \"nullstring\")"),
-    "",
-    "# List all parameter values.",
-    paste0(iface, "(\"config\")"),
-    "",
-    "# Set multiple parameter values from file.",
-    paste0(iface, "(config = \"path/to/config/file\")"),
-    "}}",
-    "\\section{Further Assistance}{\\preformatted{",
-    "# Additional usage examples.",
-    "?sqrlUsage",
-    "",
-    "# Detailed parameter descriptions.",
-    "?sqrlParams",
-    "}}",
-    "\\section{Current Settings}{\\preformatted{",
-    csc,
-    "}}")
-
-  # Write the (Rd format) text to a temp file.
-  rdfile <- tempfile(fileext = ".Rd")
-  temps <- assign("temps", c(temps, rdfile), srqlHelp)
-  writeLines(helprd, rdfile)
-
-  # Detect and handle RStudio, which does things a bit differently (different
-  # viewer, different style, different file location rules). For RStudio, the
-  # 'type' argument is ignored (help is only provided in HTML format).
-  if (nzchar(Sys.getenv("RSTUDIO_USER_IDENTITY")))
-  {
-    # Rstudio's viewer seems to want a style file in the same directory as the
-    # help (HTML) file (and only wants the file name of that CSS file, not its
-    # full path). That compels us to copy a style file to this temp file.
-    csstemp <- tempfile(fileext = ".css")
-    temps <- assign("temps", c(temps, csstemp), srqlHelp)
-
-    # Set a default cascading style sheet. This won't exist within the temp
-    # directory, in which case the viewer will apply default styling when it
-    # does not find the CSS file (no harm done, but not aesthetically ideal).
-    cssfile <- "R.css"
-
-    # These locations are where we think the RStudio and R style files will be.
-    # The two styles are different, so the RStudio file is preferred.
-    cssfiles <- c(file.path(Sys.getenv("RSTUDIO_PANDOC"),
-                            "../../resources/R.css"),
-                  file.path(R.home(), "library/base/html/R.css"))
-
-    # If we find, and can copy, the RStudio file, use that. Otherwise, if we
-    # find, and can copy, the base R file, use that. If we find neither, the
-    # default style will apply.
-    for (css in cssfiles)
-    {
-      if (!is.null(SqrlPath(css))
-          && file.copy(css, csstemp))
-      {
-        cssfile <- csstemp
-        break
-      }
-    }
-
-    # Convert the Rd to HTML, write that to another temp file, open that in the
-    # RStudio viewer, and return invisible NULL. Note the use of basename().
-    htmlfile <- tempfile(fileext = ".html")
-    assign("temps", c(temps, htmlfile), srqlHelp)
-    if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
-                                stylesheet = basename(cssfile)))$error)
-    {
-      return(utils::help("sqrlUsage"))
-    }
-    getOption("viewer")(htmlfile)
-    return(invisible(NULL))
-  }
-
-  # If the help type is 'html', convert the Rd to HTML, write that to another
-  # temp file, open that file in the default browser, and return NULL.
-  if (identical(type, "html"))
-  {
-    htmlfile <- tempfile(fileext = ".html")
-    assign("temps", c(temps, htmlfile), srqlHelp)
-    cssfile <- paste0(R.home(), "/library/base/html/R.css")
-    if (SqrlTry(tools::Rd2HTML(rdfile, htmlfile, package = "SQRL",
-                                stylesheet = cssfile))$error)
-    {
-      return(utils::help("sqrlUsage", help_type = "html"))
-    }
-    utils::browseURL(htmlfile)
-    return(invisible(NULL))
-  }
-
-  # Otherwise, convert the Rd to text, write that to another temp file, open
-  # that file in the default text viewer (pager), and return invisible NULL.
-  txtfile <- tempfile(fileext = ".txt")
-  assign("temps", c(temps, txtfile), srqlHelp)
-  if (SqrlTry(tools::Rd2txt(rdfile, txtfile, package = "SQRL"))$error)
-  {
-    return(utils::help("sqrlUsage", help_type = "text"))
-  }
-  file.show(txtfile)
-  return(invisible(NULL))
-}
-
-SqrlHelper <- function(value = "")
-{
-  # Formats parameter values for inclusion in a (.Rd-format) help file.
-  # Args:
-  #   value : Either a list (source configuration) or a single character string.
-  # Returns:
-  #   The input values, converted to strings and with %s escaped.
-  # SQRL Calls:
-  #   None.
-  # SQRL Callers:
-  #   SqrlHelp().
-  # User:
-  #   Has no direct access, but is able to control the supplied value through
-  #   parameter settings (interface name, ping query, and so on). These are
-  #   converted to strings and escaped. No further checking is required.
-
-  # Deparse and escape the entire configuration parameter-value list.
-  # Any RODBC channel is reduced to its integer label.
-  # Any library is truncated to its first element (plus an ellipsis).
-  if (identical(class(value), class(list())))
-  {
-    if (!is.null(value[["channel"]]))
-    {
-      value[["channel"]] <- as.numeric(value[["channel"]])
-    }
-    if ("library" %in% names(value))
-    {
-      if (!is.null(value[["library"]])
-          && (length(value[["library"]]) > 1L))
-      {
-        value[["library"]] <- paste0(deparse(value[["library"]][1L]), ", ...")
-      } else
-      {
-        value[["library"]] <- deparse(value[["library"]])
-      }
-      value[["library"]] <- gsub("%", "\\\\%", value[["library"]])
-    }
-    for (name in names(value)[names(value) != "library"])
-    {
-      value[[name]] <- gsub("%", "\\\\%", deparse(value[[name]]))
-    }
-    return(value)
-  }
-
-  # Escape a single character-string.
-  return(gsub("%", "\\\\%", value))
-}
-
-SqrlIndicator <- function(datasource = "",
-                          action = "",
-                          marker = "all")
-{
-  # Alters the display-state of open-connection (channel) indicators.
-  # Args:
-  #   datasource : The name of a known (to SQRL) data source.
-  #   action     : One of 'show', 'hide', 'busy', or 'done'.
-  #   marker     : One of 'prompt', 'wintitle', or 'all' (the default).
-  # Returns:
-  #   Invisible NULL, after making the requested indicator changes.
-  # SQRL Calls:
-  #   SqrlParam().
-  # utils Calls:
-  #   getWindowTitle(), setWindowTitle() (only if the utils package is attached,
-  #   and these two functions exist within it on the current OS/platform).
-  # SQRL Callers:
-  #   SqrlDelegate(), SqrlParam(), SqrlPing(), SqrlSubmit().
-  # User:
-  #   Has no direct access, and is unable to indirectly supply any of the
-  #   arguments. Argument validity checks are not required.
-
-  # TRUE if the indicators are potentially visible (when the data source's
-  # channel is open). No test of openness is made here; that should be performed
-  # (where necessary) before calling this function.
-  visible <- (interactive()
-              && SqrlParam(datasource, "visible"))
-
-  # TRUE if, and only if, the prompt is to be altered.
-  do.prompt <- (visible
-                && (marker %in% c("all", "prompt")))
-
-  # TRUE if, and only if, the window title is to be altered.
-  # The get/setWindowTitle() functions only exist on Windows versions of R,
-  # and only work with Rgui, R Console, and Rterm (not with RStudio).
-  # We test ("package:utils" %in% search()), rather than
-  # requireNamespace("utils", quietly = TRUE), because, if utils is attached,
-  # we then need to look inside it to see whether or not the get & set functions
-  # exist. This doesn't work without attachment (having the namespace available
-  # does not suffice). We could promote our utils reliance from suggests to
-  # depends, in the package description file, but would rather not have this
-  # strict requirement (this indicator feature is nice to have, but not
-  # absolutely necessary). Utils is normally attached on start-up, anyhow.
-  do.title <- (visible
-                && (marker %in% c("all", "wintitle"))
-                && ("package:utils" %in% search())
-                && exists("getWindowTitle", where = "package:utils",
-                          mode = "function", inherits = FALSE)
-                && exists("setWindowTitle", where = "package:utils",
-                          mode = "function", inherits = FALSE))
-
-  # When the action is 'show', apply (append and/or prepend) the indicator(s).
-  if (action == "show")
-  {
-    # Append window title-bar open-channel indicator.
-    if (do.title)
-    {
-      indic <- SqrlParam(datasource, "wintitle")
-      if (grepl("[[:graph:]]", indic))
-      {
-        utils::setWindowTitle(title = sub("\\s+$", "",
-                      paste(sub("\\s+$", "", utils::getWindowTitle()), indic)))
-      }
-    }
-    # Prepend command-prompt open-channel indicator.
-    if (do.prompt)
-    {
-      indic <- SqrlParam(datasource, "prompt")
-      options(prompt = paste0(indic, getOption("prompt")))
-    }
-    # Return invisible NULL.
-    return(invisible(NULL))
-  }
-
-  # When the action is 'hide', remove the indicator(s). This will work (as in,
-  # does nothing, quietly) if the indicators aren't actually on to begin with.
-  # Where this can go wrong, is when the open indicators are defined as, say,
-  # 'A', and 'AB'. Removal of 'A" from 'ABA' might leave 'BA'. So don't do that.
-  if (action == "hide")
-  {
-    # Remove one open-channel indicator from the window title.
-    if (do.title)
-    {
-      indic <- SqrlParam(datasource, "wintitle")
-      if (grepl("[[:graph:]]", indic))
-      {
-        windowtitle <- utils::getWindowTitle()
-        if (grepl(indic, windowtitle, fixed = TRUE))
-        {
-          position <- max(gregexpr(indic, windowtitle, fixed = TRUE)[[1L]])
-          before <- sub("\\s+$", "", substring(windowtitle, 1L, position - 1L))
-          after <- substring(windowtitle, position + nchar(indic))
-          utils::setWindowTitle(title = sub("\\s+$", "", paste0(before, after)))
-        }
-      }
-    }
-    # Remove one open-channel indicator from the R prompt.
-    if (do.prompt)
-    {
-      indic <- SqrlParam(datasource, "prompt")
-      if (nchar(indic) > 0L)
-      {
-        options(prompt = sub(indic, "", getOption("prompt"), fixed = TRUE))
-      }
-    }
-    # Return invisible NULL.
-    return(invisible(NULL))
-  }
-
-  # When the action is 'query', 'fetch', or 'ping', append a job-in-progress
-  # marker ('*', '+', or '?', respectively) to the data source's window title
-  # indicator, then return invisible NULL. This will work (as in, does nothing,
-  # quietly) if the indicator isn't actually on.
-  if (action %in% c("query", "fetch", "ping"))
-  {
-    glyph <- switch(action, "query" = "*", "fetch" = "+", "ping" = "?")
-    if (do.title)
-    {
-      indic <- SqrlParam(datasource, "wintitle")
-      glyphed <- paste0(indic, glyph)
-      if (grepl("[[:graph:]]", indic))
-      {
-        windowtitle <- utils::getWindowTitle()
-        for (unglyphed in paste0(indic, c(" ", "*", "+", "?", "")))
-        {
-          if (grepl(unglyphed, windowtitle, fixed = TRUE))
-          {
-            utils::setWindowTitle(title = sub("\\s+$", "",
-                            sub(unglyphed, glyphed, windowtitle, fixed = TRUE)))
-            break
-          }
-        }
-      }
-    }
-    return(invisible(NULL))
-  }
-
-  # When the action is 'done', remove a job-in-progress marker ('*', '+', '?')
-  # from the data source's window title indicator, then return invisible NULL.
-  # This will work (does nothing, quietly) if no marker is actually present.
-  if (action == "done")
-  {
-    if (do.title)
-    {
-      indic <- SqrlParam(datasource, "wintitle")
-      unglyphed <- paste0(indic, " ")
-      if (grepl("[[:graph:]]", indic))
-      {
-        windowtitle <- utils::getWindowTitle()
-        for (glyphed in paste0(indic, c("*", "+", "?")))
-        {
-          if (grepl(glyphed, windowtitle, fixed = TRUE))
-          {
-            utils::setWindowTitle(title = sub("\\s+$", "",
-                            sub(glyphed, unglyphed, windowtitle, fixed = TRUE)))
-            break
-          }
-        }
-      }
-    }
-    return(invisible(NULL))
-  }
-
-  # This should be unreachable, but if we were to arrive here, return NULL.
-  return(invisible(NULL))
-}
-
-SqrlInterface <- function(datasource = "",
-                          interface = "",
-                          vital = TRUE)
-{
-  # Constructs a user-interface to a specified data source.
-  # Args:
-  #   datasource : The name of a known data source.
-  #   interface  : The name to use for that data source's interface.
-  #   vital      : When set to FALSE, name conflicts are non-fatal.
-  # Returns:
-  #   A function (named <interface>) for interacting with the data source.
-  #   Any pre-existing interface to that data source will be deleted.
-  #   If interface is not specified, the interface name defaults to the data
-  #   source name (sans whitespace). When interface == "remove", no new
-  #   interface is created, but any existing interface will be deleted. (There
-  #   is no loss of generality, since "remove" is prohibited as an interface
-  #   name due to its conflicting with the base::remove() function.)
-  # SQRL Calls:
-  #   SqrlFace(), SqrlInterface() (self), SqrlParam().
-  # SQRL Callers:
-  #    SqrlCache(), SqrlConfig(), SqrlDelegate(), SqrlDSNs(), SqrlInterface()
-  #    (self), SqrlOff(), SqrlParam(), SqrlSource(), sqrlInterface().
-  # User:
-  #   Has no direct access, but is able to indirectly supply the datasource
-  #   argument via sqrlInterface(), and through SqrlSources() by editing the
-  #   registered data source names (DSNs) prior to loading SQRL. The user can
-  #   indirectly supply the interface argument via sqrlInterface(),
-  #   SqrlDelegate(), and through SqrlSources() by editing the DSNs prior to
-  #   loading SQRL. The user cannot indirectly supply the vital argument. In
-  #   all cases, existence of the datasource is established before calling this
-  #   function. The interface value could be anything, and is checked here.
-
-  # This is the user-interface function-body definition for the data source.
-  uibody <- paste0("function(...) {SqrlShell(\"", datasource,
-                    "\", base::parent.frame(), base::list(...))}")
-
-  # Abort on invalid interface (name). Allowed values are NULL or a character
-  # string. The requested name may, or may not, be available and assignable.
-  if (!is.null(interface)
-      && (!identical(class(interface), class(character()))
-          || (length(interface) != 1L)
-          || !nzchar(trimws(interface))))
-  {
-    if (!vital)
-    {
-      return(invisible(NULL))
-    }
-    stop("Invalid interface name.")
-  }
-
-  # Remove any name and leading or trailing whitespace from the interface
-  # argument. Applying trimws() to NULL would produce character(0). The
-  # as.character() function removes any name attribute the string may have.
-  if (!is.null(interface))
-  {
-    interface <- trimws(as.character(interface))
-  }
-
-  # Isolate the previous interface (NULL when no interface was defined).
-  preface <- SqrlParam(datasource, "interface")
-
-  # On a request to delete the data source's interface, if we can confirm the
-  # interface object retains its original SQRL definition, then we delete that
-  # object. Either way, the interface is deregistered in the data source's
-  # cache, and an invisible NULL is returned.
-  if (is.null(interface)
-      || identical(interface, "remove"))
-  {
-    if (!is.null(preface))
-    {
-      if (SqrlFace(preface, exists = TRUE))
-      {
-        fun <- paste(deparse(SqrlFace(preface)), collapse = "")
-        if (gsub("[[:space:]]+", "", fun) == gsub("[[:space:]]+", "", uibody))
-        {
-          SqrlFace(preface, delete = TRUE)
-        }
-      }
-      SqrlParam(datasource, "interface", NULL)
-    }
-    return(invisible(NULL))
-  }
-
-  # Check that the preface actually is a SQRL interface, and set NULL otherwise.
-  # To be an interface, it must be registered within the source parameter cache,
-  # exist as a function, and have the precise uibody definition (above).
-  if (!is.null(preface)
-      && (SqrlFace(preface, exists = FALSE)
-          || (gsub("[[:space:]]+", "",
-                    paste(deparse(SqrlFace(preface)), collapse = ""))
-                    != gsub("[[:space:]]+", "", uibody))))
-  {
-    preface <- NULL
-    SqrlParam(datasource, "interface", NULL)
-  }
-
-  # If no interface was specified, use the data source name (sans whitespace).
-  if (nchar(interface) < 1L)
-  {
-    interface <- gsub("[[:space:]]+", "", datasource)
-  }
-
-  # If the interface already exists (under the same name), return it (silently).
-  # The above chack on preface guarantees existence within envir when not NULL.
-  if (!is.null(preface)
-      && (preface == interface))
-  {
-    return(invisible(interface))
-  }
-
-  # Ensure the interface name is assignable. Non-assignability is usually fatal,
-  # but when vital == FALSE the function exists normally (SqrlSources() uses
-  # this when auto-generating functions, since 'A<<B' is a valid DSN name).
-  if (interface != make.names(interface))
-  {
-    if (!vital)
-    {
-      return(invisible(NULL))
-    }
-    stop("Unassignable interface name.")
-  }
-
-  # Abort if some other object already exists under the chosen name.
-  # Usually, these conflicts are fatal, but when vital == FALSE the function
-  # exits normally (SqrlSources() uses this when auto-generating interfaces).
-  if (SqrlFace(interface, clashes = TRUE))
-  {
-    if (!vital)
-    {
-      return(invisible(NULL))
-    }
-    stop("Interface name conflict.")
-  }
-
-  # If the data source already has an interface (under some other name), then
-  # delete that existing interface (before continuing).
-  if (!is.null(preface)
-      && (preface != interface))
-  {
-    SqrlInterface(datasource, "remove")
-  }
-
-  # Assign the interface function to the chosen name. Note that changing the
-  # interface (name) does not change the wintitle or prompt strings. Those are
-  # both based upon the (invariant) data source name.
-  SqrlFace(interface, uibody)
-
-  # Register that assignment within the data source's cache. Again, this does
-  # not alter the (data source name based) wintitle or prompt strings.
-  SqrlParam(datasource, "interface", interface)
-
-  # Return the name of the new user-interface function (invisibly).
-  return(invisible(interface))
-}
-
-SqrlIsOpen <- function(datasource = "",
-                        besure = FALSE)
-{
-  # Tests whether or not an open ODBC channel exists to the data source.
-  # Args:
-  #   datasource : The name of a data source.
-  #   besure     : Check thoroughly (ping the source) when this is set to TRUE.
-  # Returns:
-  #   TRUE if the data source exists, and SQRL has an open channel to it.
-  #   FALSE, otherwise.
-  # SQRL Calls:
-  #   SqrlClose(), SqrlParam(), SqrlPing(), SqrlTry().
-  # RODBC Calls:
-  #   odbcGetInfo().
-  # SQRL Callers:
-  #   SqrlDelegate(), SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(),
-  #   SqrlSubmit().
-  # User:
-  #   Has no direct access, and is unable to indirectly supply either argument.
-  #   Argument validity checks are not required.
-
-  # Attempt to obtain the channel parameter value for the specified data source.
-  channel <- SqrlTry(SqrlParam(datasource, "channel"), warn = FALSE)
-
-  # Return FALSE when the datasource is invalid (does not exist => is not open).
-  if (channel$error)
-  {
-    return(FALSE)
-  }
-
-  # Isolate the value of the channel parameter (strip the SqrlTty() error flag).
-  channel <- channel$value
-
-  # Return FALSE when the channel is closed (and we knew that).
-  if (is.null(channel))
-  {
-    return(FALSE)
-  }
-
-  # Return FALSE when the channel is not an RODBC handle (in which case we may
-  # have mistakenly thought the channel was open, since it was non-null valued).
-  if (!identical(class(channel), "RODBC"))
-  {
-    SqrlClose(datasource)
-    return(FALSE)
-  }
-
-  # Attempt to obtain channel information. This will fail if the channel has
-  # been closed from our end, or is not of RODBC class (repeating, in effect,
-  # the test above), but will succeed if the channel has been closed from the
-  # other end (and we were previously unaware of that).
-  info <- SqrlTry(RODBC::odbcGetInfo(channel), warn = FALSE)
-
-  # Return FALSE when the channel is closed (but we thought it was open).
-  if (info$error)
-  {
-    SqrlClose(datasource)
-    return(FALSE)
-  }
-
-  # When besure is FALSE (the default), we only check openness from our end.
-  # That being the case, return TRUE if we get to this point (the channel
-  # appears to be open from our end) and we're not going to be more thorough.
-  if (!besure)
-  {
-    return(TRUE)
-  }
-
-  # Otherwise (when we want to be thorough), ping the source to make sure.
-  # If the ping succeeds, the connection must be open.
-  if (SqrlPing(datasource))
-  {
-    return(TRUE)
-  }
-
-  # The ping failed; the connection is not open after all (has been dropped at
-  # the source's end). Formally close it at this end, before returning the
-  # openness status (FALSE).
-  SqrlClose(datasource)
-  return(FALSE)
-}
-
-SqrlOff <- function()
-{
-  # Close SQRL channels, deactivate SQRL.
-  # Args:
-  #   None.
-  # Returns:
-  #   Invisible NULL, after closing channels and detaching SQRL.
-  # SQRL Calls:
-  #   SqrlCache(), SqrlClose(), SqrlInterface(), SqrlTry().
-  # RODBC Calls:
-  #   odbcCloseAll().
-  # SQRL Callers:
-  #   sqrlOff().
-  # User:
-  #   User has no direct access, and there are no arguments.
-
-  # SQRL data sources correspond to child environments of srqlHaus. For each
-  # of these, close any open channel, remove any interface, and delete any data
-  # within the source cache (may contain passwords and so on). The garbage
-  # collector ought to take care of the cached data after we detach srqlHaus,
-  # but it's best to be immediate and sure. Operations are wrapped in silent
-  # try(), because we don't want one hiccup to block any other activity.
-  for (datasource in SqrlCache("*"))
-  {
-    SqrlTry(SqrlClose(datasource), warn = FALSE)
-    SqrlTry(SqrlInterface(datasource, "remove"), warn = FALSE)
-    cache <- SqrlCache(datasource)
-    SqrlTry(remove(list = objects(pos = cache, all.names = TRUE), pos = cache),
-            warn = FALSE)
-  }
-
-  # Detach the public SQRL:Face (interfaces) environment. The garbage collector
-  # should handle the rest. Again, wrapped in try() so that a failure here won't
-  # have knock-on effects.
-  SqrlTry(detach("SQRL:Face"), warn = FALSE)
-
-  # Detach and unload the SQRL package. The .onUnload() function attempts to
-  # detach SQRL:Face once again (but this doesn't matter).
-  SqrlTry(detach("package:SQRL", unload = TRUE), warn = FALSE)
-
-  # Return invisible NULL.
-  return(invisible(NULL))
-}
-
-SqrlOpen <- function(datasource = "")
-{
-  # Opens a channel to a data source.
-  # Args:
-  #   datasource : The name of a data source.
-  # Returns:
-  #   Invisible NULL, after creating and caching the data source channel.
-  #   Will throw a fatal exception should the connection attempt fail.
-  # SQRL Calls:
-  #   SqrlIsOpen(), SqrlParam(), SqrlParams(), SqrlPing(), SqrlTry().
-  # RODBC Calls:
-  #   odbcConnect(), odbcDriverConnect()
-  # SQRL Callers:
-  #   SqrlDelegate(), SqrlSubmit().
-  # User:
-  #   Has no direct access. Is unable to supply the only argument.
-  #   Argument validity checks are not required.
-
-  # If an open channel already exists, do not attempt to open another.
-  if (SqrlIsOpen(datasource, besure = TRUE))
-  {
-    return(invisible(NULL))
-  }
-
-  # RODBC will prompt the user (via dialog box) for missing information (uid,
-  # pwd, etc.) only in Rgui. In Rterm, RStudio, etc., pwd must be contained in
-  # the DSN or connection string, or the pwd parameter must be set, prior to
-  # attempting to connect. Otherwise, a (connection failure) error will result.
-
-  # If a connection string has been defined for this source, connect using that.
-  connection <- as.character(SqrlParam(datasource, "connection"))
-  if (nchar(connection) > 0L)
-  {
-    for (param in SqrlParams("substitutable"))
-    {
-      connection <- gsub(paste0("<", param, ">"), SqrlParam(datasource, param),
-                         connection, fixed = TRUE)
-    }
-    channel <- SqrlTry(
-                RODBC::odbcDriverConnect(
-                  connection = connection,
-                  case = SqrlParam(datasource, "case"),
-                  believeNRows = SqrlParam(datasource, "believeNRows"),
-                  colQuote = SqrlParam(datasource, "colQuote"),
-                  tabQuote = SqrlParam(datasource, "tabQuote"),
-                  interpretDot = SqrlParam(datasource, "interpretDot"),
-                  DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
-                  rows_at_time = SqrlParam(datasource, "rows_at_time"),
-                  readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
-
-  # Otherwise (no string), connect using the registered data source name (DSN).
-  } else
-  {
-    # If a user-ID and/or password has been defined, use the defined value (this
-    # overrides any corresponding value that may be defined within the DSN).
-    # Otherwise, use '' (rather than the default values), which causes RODBC to
-    # go with any values in the DSN (and to ask for missing values in Rgui).
-    # We can't just send the default values, because these will override any
-    # corresponding values on the DSN (which is unlikely to be the preferred
-    # behaviour). We do still want a non-empty default user-id, since this is
-    # useful when connecting via a string incorporating the <uid> placeholder.
-    uid <- ""
-    pwd <- ""
-    if (SqrlParam(datasource, "uid", isdefined = TRUE))
-    {
-      uid <- SqrlParam(datasource, "uid")
-    }
-    if (SqrlParam(datasource, "pwd", isdefined = TRUE))
-    {
-      pwd <- SqrlParam(datasource, "pwd")
-    }
-    channel <- SqrlTry(
-                RODBC::odbcConnect(
-                  dsn = SqrlParam(datasource, "dsn"),
-                  uid = uid,
-                  pwd = pwd,
-                  case = SqrlParam(datasource, "case"),
-                  believeNRows = SqrlParam(datasource, "believeNRows"),
-                  colQuote = SqrlParam(datasource, "colQuote"),
-                  tabQuote = SqrlParam(datasource, "tabQuote"),
-                  interpretDot = SqrlParam(datasource, "interpretDot"),
-                  DBMSencoding = SqrlParam(datasource, "DBMSencoding"),
-                  rows_at_time = SqrlParam(datasource, "rows_at_time"),
-                  readOnlyOptimize = SqrlParam(datasource, "readOnlyOptimize")))
-  }
-
-  # Halt and notify on failure to connect. Might just be an incorrect password,
-  # but could also be a network or server outage, etc. Fatal error, regardless.
-  # When RODBC::odbcConnect or RODBC::odbcDriverConnect encounter a failure to
-  # connect, they do not stop with an error message, but instead return -1 and
-  # throw warning messages with the details.
-  if (channel$error
-      || !identical(class(channel$value), "RODBC"))
-  {
-    stop("Connection attempt failed.")
-  }
-
-  # Looks like a valid connection channel was established. Record handle.
-  channel <- SqrlParam(datasource, "channel", channel$value)
-
-  # Double-check. If the connection attempt was unsuccessful, halt and notify.
-  if (!SqrlIsOpen(datasource))
-  {
-    stop("Connection attempt failed.")
-  }
-
-  # Scrape uid, dsn, and driver from the channel's connection attribute (in case
-  # the user should have entered something new). Mis-scraping will not kill the
-  # open channel, but it will produce an incorrect view in SqrlConfig(), and
-  # will prevent network drop-out recovery in SqrlSubmit(). We blank the uid
-  # parameter first, because if it does not appear in the channel's connection
-  # string, then it could be anything (when contained within a DSN, perhaps).
-  SqrlParam(datasource, "uid", "", override = TRUE)
-  cstring <- attr(channel, "connection.string")
-  cstrings <- unlist(strsplit(cstring, ';'))
-  for (param in SqrlParams("scrapeable-channel"))
-  {
-    pattern <- paste0("^", param, "=")
-    matches <- grepl(pattern, cstrings, ignore.case = TRUE)
-    if (any(matches))
-    {
-      index <- which(matches)[1L]
-      value <- trimws(sub(pattern, "", cstrings[index], ignore.case = TRUE))
-      SqrlParam(datasource, param, trimws(gsub("^\\{|\\}$", "", value)),
-                override = TRUE)
-    }
-  }
-
-  # If no ping has been defined for this data source, attempt to find (set) one.
-  if (is.null(SqrlParam(datasource, "ping")))
-  {
-    SqrlPing(datasource, set = TRUE)
-  }
-
-  # Return invisible NULL.
-  return(invisible(NULL))
-}
-
-SqrlParam <- function(datasource = "",
-                      parameter = "",
-                      set,
-                      override = FALSE,
-                      isdefined = NULL)
-{
-  # Gets and sets named SQRL/RODBC control parameters for a data source.
-  # Args:
-  #   datasource : The name of a known (to SQRL) data source.
-  #   parameter  : The name of a SQRL or RODBC control parameter.
-  #   set        : The value to assign to that parameter (optional).
-  #   override   : If set to TRUE, open status does not block value changes.
-  #   isdefined  : If set to TRUE, return whether or not a value is defined.
-  # Returns:
-  #   The value of the named parameter for the named data source. If the set
-  #   argument is specified, then the new value is returned (invisibly) after
-  #   its assignment to the parameter (new passwords are not returned).
-  # SQRL Calls:
-  #   SqrlCache(), SqrlDefault(), SqrlIndicator(), SqrlInterface(),
-  #   SqrlIsOpen(), SqrlParam() (self), SqrlParams().
-  # RODBC Calls:
-  #   odbcDataSources().
-  # SQRL Callers:
-  #   SqrlCache(), SqrlClose(), SqrlConfig(), SqrlDefault(), SqrlDelegate(),
-  #   SqrlDSNs(), SqrlFile(), SqrlIndicator(), SqrlInterface(), SqrlIsOpen(),
-  #   SqrlOpen(), SqrlParam() (self), SqrlPing(), SqrlProc(), SqrlShell(),
-  #   SqrlStatement(), SqrlSource(), SqrlSubmit(), SqrlSubScript(),
-  #   SqrlStatement(), SqrlValue(), sqrlInterface().
-  # User:
-  #   Has no direct access, but is able to supply (only) parameter and set via
-  #   SqrlDelegate() and/or SqrlConfig(), by way of SqrlValue(). SqrlDelegate()
-  #   vets parameter while the SqrlConfig() does not (although it will restrict
-  #   parameter to being a string, and is write-only). Neither vets set, and
-  #   that must be performed here. (SqrlValue() merely passes-through.)
-
-  # Obtain a handle to the data source's SQRL cache.
-  cacheenvir <- SqrlCache(datasource)
-
-  # When the defined flag is either TRUE or FALSE, return only whether or not a
-  # (default-overriding) value has been set (exists) for the parameter.
-  if (!is.null(isdefined))
-  {
-    return(exists(parameter, cacheenvir, inherits = FALSE) == isdefined)
-  }
-
-  # When the parameter is 'reset', the set argument should be a vector of
-  # parameter names for which the default values are to be restored.
-  if (identical(parameter, "reset"))
-  {
-    # Coerce parameters to a character vector (sort() doesn't handle lists).
-    set <- as.character(unlist(set))
-
-    # Retain only those (unique) parameter names that are in the official list.
-    params <- sort(unique(set[set %in% SqrlParams("all")]))
-
-    # If we are left with no parameters to reset, return invisible NULL.
-    if (length(params) < 1L)
-    {
-      return(invisible(NULL))
-    }
-
-    # Construct a named list of the default values for those parameters.
-    news <- vector(mode(list()), length(params))
-    names(news) <- params
-    for (param in params)
-    {
-      news[param] <- list(SqrlDefault(datasource, param))
-    }
-
-    # Retain only those parameters for which a value has been set. Any others
-    # must necessarily already be at their defaults (resetting does nothing).
-    params <- params[params %in% SqrlParam(datasource, "*")]
-
-    # When all parameters are at their defaults, invisibly return them.
-    if (length(params) < 1L)
-    {
-      return(invisible(news))
-    }
-
-    # Abort if any of the supplied parameters are write-protected ('name')
-    # or read-only ('channel').
-    if (any(params %in% SqrlParams("write-protected"))
-        || any(params %in% SqrlParams("read-only")))
-    {
-      stop("Cannot reset protected parameter.")
-    }
-
-    # If the connection is open, we cannot reset any locked-while-open
-    # parameters (abort if such a request has been made), and we must also
-    # change any visible indicators (if those parameters are to be reset).
-    # This is a bit of a kludge; here we set any visible indicators to values
-    # that are identical to their defaults, then (later, below) we remove those
-    # set values, leaving the actual defaults in place.
-    if (SqrlIsOpen(datasource))
-    {
-      if (!override
-          && any(params %in% SqrlParams('locked-while-open')))
-      {
-        stop("Cannot reset parameter while connection is open.")
-      }
-      if ("visible" %in% params)
-      {
-        SqrlParam(datasource, "visible",
-                  SqrlDefault(datasource, "visible"), override)
-      }
-      if (SqrlParam(datasource, "visible"))
-      {
-        if ("prompt" %in% params)
-        {
-          SqrlParam(datasource, "prompt",
-                    SqrlDefault(datasource, "prompt"), override)
-        }
-        if ("wintitle" %in% params)
-        {
-          SqrlParam(datasource, "wintitle",
-                    SqrlDefault(datasource, "wintitle"), override)
-        }
-      }
-    }
-
-    # Interface removal is a special case, handled by SqrlInterface().
-    # Failure to re-apply the original (default) interface is non-fatal.
-    if ("interface" %in% params)
-    {
-      SqrlInterface(datasource, "remove")
-      SqrlInterface(datasource, datasource, vital = FALSE)
-      news["interface"] <- list(SqrlParam(datasource, "interface"))
-      params <- params[params != "interface"]
-      if (length(params) < 1L)
-      {
-        return(invisible(news))
-      }
-    }
-
-    # Remove the parameter-value definitions (restores default values).
-    remove(list = params, pos = cacheenvir)
-
-    # Invisibly return the new parameter-values (i.e., their defaults). Default
-    # values are never secret or semi-secret, so these can go back to the user.
-    return(invisible(news))
-  }
-
-  # When no value is supplied for the set argument, act as a getter.
-  if (missing(set))
-  {
-    # Obtain the temporary parameter-values (environments) stack (a list).
-    pstack <- if (exists("pstack", cacheenvir, inherits = FALSE))
-              {
-                get("pstack", cacheenvir, inherits = FALSE)
-              } else
-              {
-                SqrlDefault(datasource, "pstack")
-              }
-
-    # If the stack itself was sought, return it.
-    if (parameter == "pstack")
-    {
-      return(pstack)
-    }
-
-    # Otherwise, extract the last environment from the temporary-values stack.
-    # This inherits from the previous environment (and so on, to the first).
-    pstack <- pstack[[length(pstack)]]
-
-    # When there is no set value (temporary or cached) for the parameter,
-    # return its default. Default values are never secret or semi-secret.
-    if (!exists(parameter, pstack, inherits = TRUE))
-    {
-      return(SqrlDefault(datasource, parameter))
-    }
-
-    # Take care with regard to whom we supply secret parameter values.
-    if (parameter %in% SqrlParams("secret"))
-    {
-      # If we don't see an internal call of this function (i.e., it appears to
-      # have been called from outside of the namespace), return the default.
-      calls <- gsub("\\(.*", "", .traceback(0L))
-      i <- which(calls == "SqrlParam")
-      if (length(i) < 1L)
-      {
-        return(SqrlDefault(datasource, parameter))
-      }
-
-      # Likewise, if we don't see who called this function, return the default.
-      i <- max(i) + 1L
-      if (i > length(calls))
-      {
-        return(SqrlDefault(datasource, parameter))
-      }
-
-      # If the caller is aware, return either the default value (if such has
-      # been set) or a dummy value (when some non-default value has been set).
-      if (calls[i] %in% SqrlParams("aware"))
-      {
-        value <- get(parameter, pstack, inherits = TRUE)
-        if (identical(value, SqrlDefault(datasource, parameter)))
-        {
-          return(value)
-        }
-        return("*")
-      }
-
-      # If the caller is neither aware nor informed, return the default value.
-      if (!(calls[i] %in% SqrlParams("informed")))
-      {
-        return(SqrlDefault(datasource, parameter))
-      }
-
-    # Take care with regard to whom we supply semi-secret parameter values.
-    } else if (parameter %in% SqrlParams("semi-secret"))
-    {
-      # If we don't see an internal call of this function (i.e., it appears to
-      # have been called from outside of the namespace), return the default.
-      calls <- gsub("\\(.*", "", .traceback(0L))
-      i <- which(calls == "SqrlParam")
-      if (length(i) < 1L)
-      {
-        return(SqrlDefault(datasource, parameter))
-      }
-
-      # Likewise, if we don't see who called this function, return the default.
-      i <- max(i) + 1L
-      if (i > length(calls))
-      {
-        return(SqrlDefault(datasource, parameter))
-      }
-
-      # If the caller is neither aware nor informed, return the default value.
-      if (!(calls[i] %in% c(SqrlParams("aware"), SqrlParams("informed"))))
-      {
-        return(SqrlDefault(datasource, parameter))
-      }
-    }
-
-    # The parameter is not secret, or the caller is allowed to know its value.
-    # Return the current (temporary or cached) value.
-    return(get(parameter, pstack, inherits = TRUE))
-  }
-
-  # The set argument has been supplied; act as a setter (cache and return).
-  # First, we coerce the raw value to the expected type for the parameter.
-
-  # Normal action is to set the permanent value of the named parameter.
-  istemp <- FALSE
-  targetenvir <- cacheenvir
-
-  # However, if the parameter is 'pstack' and the set value is named, then this
-  # is reinterpreted as a request to assign a temporary value (value-of-set) for
-  # the named parameter (name-of-set) into the most recent environment of the
-  # temporary values stack (pstack).
-  if ((parameter == "pstack")
-      && !is.null(names(set)))
-  {
-    parameter <- names(set)
-    set <- set[[1L]]
-    istemp <- TRUE
-    pstack <- SqrlParam(datasource, "pstack")
-    targetenvir <- pstack[[length(pstack)]]
-    if ((length(parameter) != 1L)
-        || !(parameter %in% SqrlParams("all")))
-    {
-      stop("Unrecognised parameter for temporary assignment.")
-    }
-    if (parameter %in% SqrlParams("no-temp-allowed"))
-    {
-      stop("Parameter does not support temporary values.")
-    }
-  }
-
-  # In the special case where the parameter is (still) 'pstack', we have a
-  # request to expand or contract the temporary-values environments stack.
-  if (parameter == "pstack")
-  {
-    pstack <- SqrlParam(datasource, parameter)
-    ptop <- length(pstack)
-    if (set == "expand")
-    {
-      pstack <- append(pstack, new.env(parent = pstack[[ptop]]))
-    } else if (length(pstack) >= 2L)
-    {
-      tpars <- objects(pstack[[ptop]])
-      verbose <- interactive() && SqrlParam(datasource, "verbose")
-      remove(list = tpars, pos = pstack[[ptop]])
-      pstack <- pstack[-ptop]
-      if ((length(tpars) > 0L)
-          && verbose)
-      {
-        cat("\n")
-        for (tpar in tpars)
-        {
-          rval <- deparse(SqrlParam(datasource, tpar))
-          cat("Reverting:", tpar, "=", rval, "\n")
-        }
-        cat("\n")
-      }
-    }
-    assign(parameter, pstack, cacheenvir)
-    return(invisible(set))
-  }
-
-  # In the special case where the connection parameter has been specified as a
-  # character vector of named and/or unnamed elements, we collapse that vector
-  # to a single (connection) string. Where present, the vector element names
-  # become the connection-parameter names within the string.
-  if ((parameter == "connection")
-      && identical(class(set), class(character()))
-      && (length(set) > 0L)
-      && !any(is.na(set)))
-  {
-    if (is.null(names(set))
-        || !any(nzchar(names(set))))
-    {
-      set <- paste0(set, collapse = ";")
-    } else
-    {
-      set <- paste0(names(set), c("", "=")[nzchar(names(set)) + 1L], set,
-                    collapse = ";")
-    }
-  }
-
-  # Nullable-string parameters are string-types which accept a set value of NULL
-  # as an alias for the empty string.
-  if ((parameter %in% SqrlParams("nullable-string"))
-      && is.null(set))
-  {
-    set <- ""
-  }
-
-  # Coerce set to the appropriate data type for the specified parameter.
-  # Firstly, the channel parameter can be either NULL, or of RODBC class.
-  # This can be set frequently, when the autoclose parameter value is TRUE.
-  if (parameter %in% SqrlParams("rodbc/null-type"))
-  {
-    if (!is.null(set)
-        && !identical(class(set), "RODBC"))
-    {
-      stop("New parameter value is not a connection handle.")
-    }
-
-  # Parameters that are (non-NA) character-strings. (These include all the
-  # scrapeable-channel parameters that may be set with each new channel.)
-  } else if (parameter %in% SqrlParams("string-type"))
-  {
-    set <- suppressWarnings(as.character(set))
-    if ((length(set) != 1L)
-        || is.na(set))
-    {
-      stop("New parameter value is not a character string.")
-    }
-
-  # Parameters that are logically-valued.
-  } else if (parameter %in% SqrlParams("boolean-type"))
-  {
-    set <- suppressWarnings(as.logical(set))
-    if (!identical(set, TRUE)
-        && !identical(set, FALSE))
-    {
-      stop("New parameter value not a logical singleton.")
-    }
-
-  # Parameters that are integer-valued.
-  } else if (parameter %in% SqrlParams("integer-type"))
-  {
-    set <- suppressWarnings(as.integer(set))
-    if ((length(set) != 1L)
-        || is.na(set))
-    {
-      stop("New parameter value is not an integer.")
-    }
-
-  # The interface parameter can be character-valued or null-valued.
-  # Changing the parameter does not change the interface.
-  } else if (parameter %in% SqrlParams("string/null-type"))
-  {
-    if (!is.null(set))
-    {
-      set <- suppressWarnings(as.character(set))
-      if ((length(set) != 1L)
-          || is.na(set))
-      {
-        stop("New parameter value is not a character string.")
-      }
-    }
-
-  # The na.strings parameter is a character vector of any length, including 0.
-  } else if (parameter %in% SqrlParams("character-type"))
-  {
-    set <- suppressWarnings(as.character(set))
-
-  # The as.is parameter can be a logical, numerical, or character vector.
-  } else if (parameter %in% SqrlParams("index-type"))
-  {
-    # This can be a logical (not NA), a natural number (integer or numeric
-    # form), a character string (valid name form), or a vector of the same.
-    # The integer and numeric classes are both of numeric mode.
-    if (!(is.logical(set)
-          || is.numeric(set)
-          || is.character(set))
-        || any(is.na(set)))
-    {
-      stop("Parameter must be of logical, numeric, or character type.")
-    }
-
-  # The colQuote and tabQuote parameters can be either NULL, or character
-  # vectors of length 0, 1, or 2.
-  } else if (parameter %in% SqrlParams("quote-type"))
-  {
-    if (!is.null(set))
-    {
-      set <- suppressWarnings(as.character(set))
-      if ((length(set) > 2L)
-          || any(is.na(set)))
-      {
-        stop("New parameter value is not a quotation specifier.")
-      }
-    }
-
-  # The nullstring parameter is a character string, possibly NA_character_.
-  } else if (parameter %in% SqrlParams("string/na-type"))
-  {
-    set <- suppressWarnings(as.character(set))
-    if (length(set) != 1L)
-    {
-      stop("New parameter value is not a character string.")
-    }
-
-  # Values of the result and library parameters cannot be directly set by the
-  # user, but NULL is taken to mean remove the current value, which is allowed.
-  } else if (parameter %in% SqrlParams("nullable-internal"))
-  {
-    if (!(override
-          || is.null(set)))
-    {
-      stop("New parameter value is not NULL.")
-    }
-
-  # Prevent the user from assigning to any name that is not on SqrlParams()'s
-  # 'all' list. Internal functions may do so, provided the override flag is set.
-  } else if (!override)
-  {
-    stop("Unrecognised parameter.")
-  }
-
-  # We have an acceptable value of set; so now act as a setter (below).
-  # No further modification of the value occurs, other than whitespace trimming
-  # for the prompt and wintitle parameters.
-
-  # Prevent overwriting (changing) the channel while it is open, with the
-  # exception that a channel can be nullified (dropped) at any time.
-  if ((parameter == "channel")
-      && exists(parameter, cacheenvir, inherits = FALSE)
-      && !is.null(set)
-      && SqrlIsOpen(datasource))
-  {
-    if (identical(set, SqrlParam(datasource, "channel")))
-    {
-      return(invisible(set))
-    }
-    stop("Channel cannot be changed while open.")
-  }
-
-  # Prevent changing write-protected parameter values.
-  if ((parameter %in% SqrlParams("write-protected"))
-      && exists(parameter, cacheenvir, inherits = FALSE))
-  {
-    if (identical(set, SqrlParam(datasource, parameter)))
-    {
-      return(invisible(set))
-    }
-    stop("Parameter is write-protected.")
-  }
-
-  # Prevent changing RODBC::odbcConnect() parameters while connection is open.
-  # (Because those changes would only take effect on opening a new channel.)
-  # The _default_ values of these 'locked-while-open' parameters cannot be
-  # changed while the connection is open. Hence, it is permissible to replace
-  # a currently default value with an identical static value at any time.
-  # The override condition allows SqrlOpen() to alter some of these (to values
-  # the user may have entered) when the connection channel is first opened.
-  if (!override
-      && (parameter %in% SqrlParams("locked-while-open"))
-      && SqrlIsOpen(datasource))
-  {
-    # This shouldn't ever happen, but just in case.
-    if (istemp)
-    {
-      stop(paste0("Cannot set a temporary value for the '", parameter,
-                  "' parameter."))
-    }
-    # Throw an error on an attempt to change the parameter value. Must also
-    # throw an error when attempting to set a secret or semi-secret parameter to
-    # the value it already has, or else the value could be discovered by trial
-    # and error.
-    if ((parameter %in% c(SqrlParams("secret"), SqrlParams("semi-secret")))
-        || !identical(set, SqrlParam(datasource, parameter)))
-    {
-      stop("Parameter is locked while a connection is open.")
-    }
-    # Otherwise, if the current value is a default (when no static value is
-    # defined), set the (identical) new value as an equivalent static
-    # replacement (for the default).
-    if (!exists(parameter, cacheenvir, inherits = FALSE))
-    {
-      assign(parameter, set, targetenvir)
-    }
-    # Return the (unchanged) value.
-    return(invisible(set))
-  }
-
-  # The channel parameter is a special case, because we want to toggle the
-  # indicator state along with a change of channel existence (null/not).
-  if (parameter == "channel")
-  {
-    # This shouldn't ever happen, but just in case.
-    if (istemp)
-    {
-      stop("Cannot set a temporary value for the 'channel' parameter.")
-    }
-    # Current value of the channel parameter. NULL is no channel (closed),
-    # anything else is we think the channel is open (it may or may not be).
-    current <- SqrlParam(datasource, "channel")
-    # No channel to channel; show indicators (conditional on settings, mode).
-    if (is.null(current)
-        && !is.null(set))
-    {
-      SqrlIndicator(datasource, "show")
-    # Channel to no channel; hide indicators (conditional on settings, mode)
-    } else if (!is.null(current)
-                && is.null(set))
-    {
-      SqrlIndicator(datasource, "hide")
-    }
-    # Set the new value. Return it invisibly.
-    assign(parameter, set, targetenvir)
-    return(invisible(set))
-  }
-
-  # The connection parameter is a special case, since we want to extract further
-  # parameter values from it, if we can. This may fail if any of the parameter
-  # values contain = or ;, but none of the test systems allow these characters
-  # in DSNs, passwords, etc. Does any system? See related 'scrape' comments
-  # within SqrlOpen().
-  if (parameter == "connection")
-  {
-    # This shouldn't ever happen, but just in case.
-    if (istemp)
-    {
-      stop("Cannot set a temporary value for the 'connection' parameter.")
-    }
-    # Unless the connection string contains a DSN placeholder ('<dsn>'),
-    # delete any dsn definition.
-    if (!grepl("<dsn>", set))
-    {
-      SqrlParam(datasource, "reset", "dsn", override)
-    }
-    # RODBC::odbcConnect() likes to know the driver (from which it determines
-    # whether or not it's dealing with MySQL). While we're doing that, we may as
-    # well attempt to extract some other parameter values, first. We make sure
-    # the driver parameter is done last, because setting a value for dsn sets
-    # driver as a side effect, and we may want to override that.
-    spars <- SqrlParams("scrapeable-string")
-    for (param in c(spars[spars != "driver"], spars[spars == "driver"]))
-    {
-      if (grepl(paste0(param, "\\s*="), set, ignore.case = TRUE))
-      {
-        assignee <- paste0("^.*", param, "\\s*=")
-        value <- sub(assignee, "", set, ignore.case = TRUE)
-        value <- trimws(sub(";.*$", "", value))
-        # 'user' and 'username' are connection string aliases for 'uid'.
-        if (param %in% SqrlParams("uid-aliases"))
-        {
-          param <- "uid"
-        # 'password' is a connection string alias for 'pwd'.
-        } else if (param %in% SqrlParams("pwd-aliases"))
-        {
-          param <- "pwd"
-        }
-        # SQRL accepts <uid> (etc.) as connection string template place holders
-        # (to be replaced with current values at connection time). We don't want
-        # to override default or previous values with these.
-        if (value != paste0("<", param, ">"))
-        {
-          SqrlParam(datasource, param, value, override)
-        }
-      }
-    }
-    # Set the (unaltered) connection string, return invisibly.
-    assign(parameter, set, targetenvir)
-    return(invisible(set))
-  }
-
-  # Setting the dsn parameter is a special case, because we simultaneously
-  # reset the connection parameter unless the connection string contains a
-  # '<dsn>' placeholder. If the DSN is defined on the local system, then we
-  # also set the driver parameter to the DSN's value, as obtained from
-  # RODBC::odbcDataSources().
-  if (parameter == "dsn")
-  {
-    if (istemp)
-    {
-      stop("Cannot set a temporary value for the 'dsn' parameter.")
-    }
-    if (!grepl("<dsn>", SqrlParam(datasource, "connection")))
-    {
-      SqrlParam(datasource, "reset", "connection", override)
-    }
-    assign(parameter, set, targetenvir)
-    sources <- RODBC::odbcDataSources("all")
-    if ((nzchar(set))
-          && (set %in% names(sources)))
-    {
-      SqrlParam(datasource, "driver", sources[set], override)
-    }
-    return(invisible(set))
-  }
-
-  # The prompt and wintitle parameters are special cases, because, if the old
-  # prompt or wintitle is currently visible, it must be removed before changing
-  # the parameter value, and then the new value must be applied.
-  if (parameter %in% c("prompt", "wintitle"))
-  {
-    if (istemp)
-    {
-      stop(paste0("Cannot set a temporary value for the '", parameter,
-                  "' parameter."))
-    }
-    set <- trimws(set)
-    if (set != SqrlParam(datasource, parameter))
-    {
-      isopen <- SqrlIsOpen(datasource)
-      if (isopen)
-      {
-        SqrlIndicator(datasource, "hide", parameter)
-      }
-      assign(parameter, set, targetenvir)
-      if (isopen)
-      {
-        SqrlIndicator(datasource, "show", parameter)
-      }
-    }
-    return(invisible(set))
-  }
-
-  # The visible parameter is a special case, because, if the channel is open,
-  # both prompt and window title changes (addition or removal) must be made.
-  if (parameter == "visible")
-  {
-    if (istemp)
-    {
-      stop("Cannot set a temporary value for the 'visible' parameter.")
-    }
-    if (set != SqrlParam(datasource, "visible"))
-    {
-      isopen <- SqrlIsOpen(datasource)
-      if (isopen
-          && !set)
-      {
-        SqrlIndicator(datasource, "hide")
-      }
-      assign(parameter, set, targetenvir)
-      if (isopen
-          && set)
-      {
-        SqrlIndicator(datasource, "show")
-      }
-    }
-    return(invisible(set))
-  }
-
-  # The libstack parameter is a special case, because the set value is appended
-  # to the top layer of the existing stack (rather than replacing the stack).
-  if (parameter == "libstack")
-  {
-    # This shouldn't ever happen (unless the libstack storage mechanism is
-    # changed to having a library within each layer of the pstack stack), but
-    # we check here anyway, just in case.
-    if (istemp)
-    {
-      stop("Cannot alter procedures via <with>.")
-    }
-    # A NULL value is interpreted as a request to remove the stack.
-    if (is.null(set))
-    {
-      if (exists(parameter, cacheenvir, inherits = FALSE))
-      {
-        remove(list = parameter, pos = cacheenvir)
-      }
-      return(invisible())
-    }
-    # It is not possible to directly assign the lib[n][name] element within the
-    # cache environment, so we have to pull the stack pointer back here, modify
-    # the local copy, and then point the cache environment at this new copy.
-    lib <- SqrlParam(datasource, parameter)
-    # Unnamed strings are used as special stack-control values.
-    if (is.null(names(set)))
-    {
-      # When set is 'expand', add a new layer to the top of the stack (list).
-      if (set == "expand")
-      {
-        lib[[length(lib) + 1L]] <- character()
-      # Otherwise, set will be 'contract'; remove the top layer of the stack.
-      } else
-      {
-        lib[[length(lib)]] <- NULL
-      }
-    # Named strings are procedure definitions, to be added to the topmost layer
-    # of the stack.
-    } else
-    {
-      lib <- SqrlParam(datasource, parameter)
-      lib[[length(lib)]][names(set)] <- as.character(set)
-    }
-    assign(parameter, lib, cacheenvir)
-    return(invisible())
-  }
-
-  # The library parameter is a special case, because the set value is appended
-  # to the existing library (rather than replacing it).
-  if (parameter == "library")
-  {
-    # This shouldn't ever happen, but just in case.
-    if (istemp)
-    {
-      stop("Cannot alter library via <with>.")
-    }
-    # A NULL value is interpreted as a request to reset (empty) the library.
-    if (is.null(set))
-    {
-      return(SqrlParam(datasource, "reset", parameter))
-    }
-    # Otherwise, the value can only have come from SqrlFile(), and will be a
-    # named string (procedure definition). Add that definition to the library.
-    # It is not possible to directly assign the lib[name] element within the
-    # cache environment.
-    lib <- SqrlParam(datasource, parameter)
-    lib[names(set)] <- as.character(set)
-    lib <- lib[order(names(lib))]
-    assign(parameter, lib, cacheenvir)
-    return(invisible(set))
-  }
-
-  # For all other cases, set and (invisibly) return the new parameter value.
-  assign(parameter, set, targetenvir)
-  return(invisible(set))
-}
-
-SqrlParams <- function(group = "")
-{
-  # Returns any one of various useful parameter groupings.
-  # Args:
-  #   group : The (string) name (description) of a parameter group.
-  # Returns:
-  #   A character vector of the names of all parameters in the group.
-  # SQRL Calls:
-  #   None.
-  # SQRL Callers:
-  #   SqrlCache(), SqrlConfig(), SqrlDefile(), SqrlDelegate(), SqrlDSNs(),
-  #   SqrlFile(), SqrlOpen(), SqrlParam(), SqrlSource(), SqrlSources(),
-  #   SqrlValue(), sqrlAll().
-  # User:
-  #   Has no direct access, and is unable to supply the argument. Validity
-  #   checks are not required.
-
-  # Parameter-group definitions (find and return).
-  return(switch(group,
-
-    # All public (user-visible) parameter names, whether RODBC or SQRL.
-    "all"                   = c("aCollapse",
-                                "as.is",
-                                "autoclose",
-                                "believeNRows",
-                                "buffsize",
-                                "case",
-                                "channel",
-                                "colQuote",
-                                "connection",
-                                "DBMSencoding",
-                                "dec",
-                                "driver",
-                                "dsn",
-                                "errors",
-                                "interface",
-                                "interpretDot",
-                                "lCollapse",
-                                "library",
-                                "max",
-                                "na.strings",
-                                "name",
-                                "nullstring",
-                                "ping",
-                                "prompt",
-                                "pwd",
-                                "readOnlyOptimize",
-                                "result",
-                                "retry",
-                                "rows_at_time",
-                                "scdo",
-                                "stringsAsFactors",
-                                "tabQuote",
-                                "uid",
-                                "verbose",
-                                "visible",
-                                "wintitle"),
-
-    # Functions (not parameters) allowed to know whether or not secrets exist.
-    "aware"                 = c("SqrlValue"),
-
-    # Parameters of Boolean-singleton type (TRUE/FALSE, not NA).
-    "boolean-type"          = c("autoclose",
-                                "believeNRows",
-                                "errors",
-                                "interpretDot",
-                                "readOnlyOptimize",
-                                "retry",
-                                "scdo",
-                                "stringsAsFactors",
-                                "verbose",
-                                "visible"),
-
-    # Parameters of character-vector type (any length, including zero).
-    "character-type"        = c("na.strings"),
-
-    # Parameters not to copy when duplicating an existing SQRL data source.
-    "don't-copy"            = c("channel",
-                                "interface",
-                                "libstack",
-                                "name",
-                                "prompt",
-                                "result",
-                                "wintitle"),
-
-    # Parameters of index type (logical, numerical, or character vectors).
-    "index-type"            = c("as.is"),
-
-    # Functions (not parameters) allowed to know secrets.
-    "informed"              = c("SqrlOpen",
-                                "SqrlSource"),
-
-    # Parameters of integer-singleton type (not NA).
-    "integer-type"          = c("buffsize",
-                                "max",
-                                "rows_at_time"),
-
-    # Parameters that cannot be changed while the connection channel is open.
-    "locked-while-open"     = c("believeNRows",
-                                "case",
-                                "colQuote",
-                                "connection",
-                                "DBMSencoding",
-                                "driver",
-                                "dsn",
-                                "interpretDot",
-                                "readOnlyOptimize",
-                                "rows_at_time",
-                                "tabQuote",
-                                "uid"),
-
-    # Parameters whose values are lists of named values.
-    "named-values"          = c("library"),
-
-    # Parameters for which temporary working values cannot be assigned.
-    "no-temp-allowed"       = c("autoclose",
-                                "channel",
-                                "interface",
-                                "library",
-                                "name",
-                                "prompt",
-                                "result",
-                                "visible",
-                                "wintitle"),
-
-    # Parameters the user can make NULL, but whose values are otherwise only
-    # settable by private SQRL functions.
-    "nullable-internal"     = c("library",
-                                "result"),
-
-    # String-type parameters that accept NULL as an aliaas for the empty string.
-    "nullable-string"       = c("connection",
-                                "DBMSencoding",
-                                "driver",
-                                "dsn",
-                                "prompt",
-                                "pwd",
-                                "uid",
-                                "wintitle"),
-
-    # Parameters that are omitted from the SqrlConfig() configuration list.
-    "omit-from-config"      = c("result"),
-
-    # Parameters to omit from the 'settings' subset of the configuration list.
-    "omit-from-settings"    = c("channel",
-                                "connection",
-                                "driver",
-                                "dsn",
-                                "library",
-                                "name",
-                                "ping",
-                                "pwd",
-                                "result",
-                                "uid"),
-
-    # Parameters that can be file-path valued (excluded from SqrlDefile()).
-    "path-valued"           = c("driver",
-                                "dsn",
-                                "library"),
-
-    # Aliases for 'pwd' (within the 'scrapeable-string' parameter set).
-    "pwd-aliases"           = c("password"),
-
-    # Parameters of quote type can be NULL, or character-vectors of length <= 2.
-    "quote-type"            = c("colQuote",
-                                "tabQuote"),
-
-    # Parameters that cannot be set (written) by the user.
-    "read-only"             = c("channel"),
-
-    # Parameters that are of RODBC type (can be NULL valued).
-    "rodbc/null-type"       = c("channel"),
-
-    # Parameters that can have their values scraped from an open channel object.
-    "scrapeable-channel"    = c("driver",
-                                "dsn",
-                                "uid"),
-
-    # Parameters that can have their values scraped from a connection string.
-    "scrapeable-string"     = c("driver",
-                                "dsn",
-                                "password",
-                                "pwd",
-                                "uid",
-                                "user",
-                                "username"),
-
-    # Parameters whose actual values are never returned to the user.
-    "secret"                = c("password",
-                                "pwd"),
-
-    # Parameters whose values may contain a secret component.
-    "semi-secret"           = c("connection"),
-
-    # Parameters appearing in the data source summary table, in table column
-    # order (not in alphabetical order).
-    "source-table"          = c("name",
-                                "interface",
-                                "open",
-                                "driver"),
-
-    # Keywords used for SQL script identification in SqrlDelegate().
-    "sql-keywords"          = c("select",
-                                "create",
-                                "drop",
-                                "update",
-                                "insert"),
-
-    # Parameters that are of character-string (singleton) type (non-NA).
-    "string-type"           = c("aCollapse",
-                                "case",
-                                "connection",
-                                "DBMSencoding",
-                                "dec",
-                                "driver",
-                                "dsn",
-                                "lCollapse",
-                                "name",
-                                "prompt",
-                                "pwd",
-                                "uid",
-                                "wintitle"),
-
-    # Parameters that are of character-string type, with NAs allowed.
-    "string/na-type"        = c("nullstring"),
-
-    # Parameters that are of string type, or else can be NULL valued.
-    "string/null-type"      = c("interface",
-                                "ping"),
-
-    # Parameters that can take template-form within a connection string.
-    "substitutable"         = c("driver",
-                                "dsn",
-                                "pwd",
-                                "uid"),
-
-    # Aliases for 'uid' (within the 'scrapeable-string' parameter set).
-    "uid-aliases"           = c("user",
-                                "username"),
-
-    # Names to filter-out when obtaining DSNs.
-    "unwanted-sources"      = c("Access",
-                                "dBASE",
-                                "Excel"),
-
-    # Parameters that are write-once (even by SQRL, not just the user).
-    "write-protected"       = c("name"),
-
-    # This should never happen.
-    stop("Unknown parameter group.")))
-}
-
 SqrlPath <- function(path)
 {
-  # Determines whether or not the argument is a path to an existing file.
+  # Determines whether or not the argument is a path to a readable file.
   # Args:
   #   path : A possible file path, perhaps given as a list of components.
   # Returns:
@@ -5292,10 +5388,10 @@ SqrlPL <- function(state = NULL,
   # SQRL Calls:
   #   None.
   # SQRL Callers:
-  #   SqrlFile().
+  #   SqrlParse().
   # User:
   #   Has no direct access. The user is able to supply phrase via their SQL
-  #   script, but only by way of SqrlFile(), which will ensure that phrase is a
+  #   script, but only by way of SqrlParse(), which will ensure that phrase is a
   #   single string that does not contain any SQL comment or quoted literal. The
   #   user is unable to supply the state argument, although its value will
   #   reflect the content of their supplied SQL script. No argument validity
@@ -5485,14 +5581,14 @@ SqrlStatement <- function(datasource,
   # SQRL Calls:
   #   SqrlParam().
   # SQRL Callers:
-  #   SqrlDelegate(), SqrlFile().
+  #   SqrlDelegate(), SqrlParse().
   # User:
   #   Has no direct access. Can supply the only argument, via SqrlDelegate().
   #   In the event that the argument contains an object that cannot be pasted,
   #   all calls of this function are wrapped in try().
 
   # As above, this function is only (directly) called from SqrlDelegate() and
-  # SqrlFile(). Both (only) supply objects wrapped inside of a list.
+  # SqrlParse(). Both (only) supply objects wrapped inside of a list.
 
   # Recurse over the list, converting the ultimate (atomic) objects to single
   # strings (collapsing vectors with the aCollapse character).
@@ -5525,7 +5621,7 @@ SqrlSource <- function(def)
   #   performed here.
 
   # Separate the name from the definition component(s). When there is only one
-  # term, we use it's name. When there is more than one term, we use the first
+  # term, we use its name. When there is more than one term, we use the first
   # term as the name if that term is not itself named. If it is named, we look
   # instead for a unique term named 'name', and use that if it exists.
   if (length(def) == 1L)
@@ -5596,7 +5692,7 @@ SqrlSource <- function(def)
     stop("Unassignable data-source name.")
   }
 
-  # Prohibit redefinition of open sources. Always remove a preexisting source,
+  # Prohibit redefinition of open sources. Always remove a pre-existing source,
   # so that SqrlSource() begins from (defines onto) a clean slate.
   if (SqrlCache(name, exists = TRUE))
   {
@@ -6200,11 +6296,11 @@ SqrlSubScript <- function(datasource = "",
   # utils Calls:
   #   head() (only if utils is attached).
   # SQRL Callers:
-  #   SqrlFile().
+  #   SqrlParse().
   # User:
   #   Has no direct access, but is able to supply (only) the statement, phrase,
   #   and intermediate arguments via a SQRL script. These arguments will have
-  #   already been parsed and worked into the correct format, by SqrlFile() and
+  #   already been parsed and worked into the correct format, by SqrlParse() and
   #   SqrlStatement(), so no argument validity checks should be required here.
 
   # If the phrase is non-empty, append it to the statement.
@@ -6310,7 +6406,7 @@ SqrlSubScript <- function(datasource = "",
   # SqrlSubmit() does the same thing, if it receives a blank statement (which it
   # shouldn't). RODBC::sqlQuery() (to which SqrlSubmit() is a wrapper), is
   # incapable of returning NULL (or NA). It doesn't actually matter whether or
-  # not this is visible, since NULL is a special value; signifying to SqrlFile()
+  # not this is visible, since NULL is a special value signifying to SqrlParse()
   # that the current overall result should not be replaced by this one.
   return(invisible(NULL))
 }
@@ -6330,7 +6426,7 @@ SqrlTry <- function(expr,
   # SQRL Calls:
   #   None.
   # SQRL Callers:
-  #   SqrlClose(), SqrlDefile(), SqrlDelegate(), SqrlFile(), SqrlHelp(),
+  #   SqrlClose(), SqrlDefile(), SqrlDelegate(), SqrlParse(), SqrlHelp(),
   #   SqrlIsOpen(), SqrlOff(), SqrlOpen(), SqrlPath(), SqrlPing(), SqrlProc(),
   #   SqrlShell(), SqrlSource(), SqrlSubmit(), sqrlInterface(), sqrlSource(),
   #   .onUnload().
@@ -6364,7 +6460,7 @@ SqrlValue <- function(datasource = "",
 {
   # Output-safe (password obliterated) wrapper to SqrlParam().
   # Args:
-  #   datasource : The name of data source, as known to SQRL.
+  #   datasource : The name of a data source, as known to SQRL.
   #   parameter  : The name of a SQRL or RODBC control parameter.
   #   set        : A value to assign to that parameter (optional).
   # Returns:

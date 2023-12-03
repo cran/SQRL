@@ -82,7 +82,8 @@ occurs).
 # a config file, or the name of an existing source (to be copied).
 # This particular connection string would be for a GNU/Linux system
 # upon which the unixODBC driver alias 'MariaDB' has been defined,
-# in addition to the 'MDB' alias for the server address.
+# in addition to the 'MDB' alias for the server address. In general,
+# there should be no space between 'Driver=' and the driver name.
 sqrlSource(A = "Driver=MariaDB;Server=MDB;User=zarkov;Password=zenith")
 
 # Redefine source 'A', by a connection string given in sections.

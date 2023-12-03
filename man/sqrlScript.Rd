@@ -115,7 +115,8 @@ The function and values from these sections are applied in the subsequent
 <with>
   na.strings = c('NA', "-")   -- comment
   x <- 5; max = x + 1         /* comment */
-  as.is = TRUE                 # comment
+  verbose = TRUE               # comment
+  as.is = "configfile.txt"     # read from file
 </with>
 
 -- Run this query with the above settings.
@@ -127,12 +128,13 @@ They are used to set temporary parameter values, which remain in effect only
 for the duration of the script.
 To be clear, temporary values survive beyond the \code{</with>} tag, but not
 beyond the end of the script.
+The exception is that temporary values of \var{ping} are retained if and only if
+the connection would otherwise be left open without a defined \var{ping}.
 
-This mechanism only works for a limited number of parameters.
-At this time, they are: \var{aCollapse}, \var{as.is}, \var{buffsize},
-\var{dec}, \var{errors}, \var{lCollapse}, \var{max}, \var{na.strings},
-\var{nullstring}, \var{ping}, \var{pwd}, \var{retry}, \var{scdo},
-\var{stringsAsFactors}, and \var{verbose}.
+This mechanism only works for a limited number of parameters:
+\var{aCollapse}, \var{as.is}, \var{buffsize}, \var{dec}, \var{errors},
+\var{lCollapse}, \var{max}, \var{na.strings}, \var{nullstring}, \var{ping},
+\var{pwd}, \var{retry}, \var{scdo}, \var{stringsAsFactors}, and \var{verbose}.
 }
 }
 \section{Script #06 (Procedural Language Blocks)}{
@@ -394,7 +396,7 @@ parameter \var{max}, \code{sqrl("max")} returns the value currently in effect
 Hence, for purposes of setting script-specific parameter values, using
 \code{<with>} is, when possible, generally preferable to calling \code{sqrl}.
 
-As shown in script #16, the \code{sqrl} function can also be used to make nested
+As shown in script #17, the \code{sqrl} function can also be used to make nested
 queries (its arguments could just as easily be another script).
 
 When a script is being run from some particular interface, explicit calls to
@@ -494,7 +496,7 @@ Note that \code{<return>} tags are not recognised within \R sections.
 Also, \code{<return>} tags do not imply \code{<do>}, and it is an error to
 attempt a \code{<return>} within partially-formed (unsubmitted) \acronym{SQL}.
 Because \code{x <- y} returns invisibly, so too do \code{<R> x <- y <do>} and
-\code{<return (x <- y)>} (see example script #15).
+\code{<return (x <- y)>} (see example script #16).
 
 The next example shows how \code{<return>} tags become much more useful when
 combined with conditional expressions.
@@ -558,7 +560,32 @@ example script), none of these tags imply \code{<do>}.
 The space in \code{else if} is optional (i.e., \code{elseif} is equally valid).
 }
 }
-\section{Script #15 (While Loops)}{
+\section{Script #15 (Caching)}{
+\preformatted{
+-- If we already have a cached copy of the
+-- data, return that.
+<if (exists(.cached, .GlobalEnv))>
+  <return (get(.cached, .GlobalEnv))>
+</if>
+
+-- Otherwise, submit the query and cache the
+-- result before returing it.
+select * from table
+<result -> x>
+  assign(.cached, x, .GlobalEnv)
+  x
+}
+\subsection{Commentary on Script #15}{
+In this example, the result of a large query is cached locally, with \code{<if>}
+and \code{<return>} logic being used to return that cached result should the
+script be run again.
+
+This is most useful when the data changes infrequently, the query takes a long
+time to run, and the script is stored as a procedure in the library (see script
+#18).
+}
+}
+\section{Script #16 (While Loops)}{
 \preformatted{
 <R>
   batch <- split(ID, ceiling(seq_along(ID) / 1000))
@@ -576,7 +603,7 @@ The space in \code{else if} is optional (i.e., \code{elseif} is equally valid).
   <do>
 </while>
 }
-\subsection{Commentary on Script #15}{
+\subsection{Commentary on Script #16}{
 In this example, we have a script with a single argument; \code{ID}, a vector of
 integer codes.
 Supposing that vector might be too long for the \acronym{SQL} \code{in}
@@ -588,10 +615,10 @@ be either \code{TRUE} or \code{FALSE}.
 As with the \code{<if>} family, \code{<while>} and \code{</while>} tags are not
 recognised within \R sections, and do not imply \code{<do>}.
 Ordinarily, loops over \acronym{SQL} should be avoided, or used only as a last
-resort, but there are use-cases (see script #17), including for the insertion of
+resort, but there are use-cases (see script #18), including for the insertion of
 rows.
 
-Referring back to script #13, the final result of script #15 (that of
+Referring back to script #13, the final result of script #16 (that of
 \code{x <- rbind(x, y)}) is invisible.
 If visible output is required, \code{<R>x} or \code{<return (x)>} could be
 appended to the script.
@@ -600,7 +627,7 @@ The parser is simple, and does not verify or enforce correct nesting structure.
 Unintuitive output may appear when nesting violations occur.
 }
 }
-\section{Script #16 (Procedures)}{
+\section{Script #17 (Procedures)}{
 \preformatted{
 <proc "random patients">
   select patient_number
@@ -616,7 +643,7 @@ from patient_history
 where patient_number in
   (<R> sqrl("random patients", N = 200) </R>)
 }
-\subsection{Commentary on Script #16}{
+\subsection{Commentary on Script #17}{
 It is possible to define reusable \acronym{SQRL} procedures within (between)
 \code{<proc>} and \code{</proc>} tags.
 Here, a (parameterised) procedure is employed as a nested-query alternative to
@@ -632,7 +659,7 @@ is the case in this example) the \R section is within a procedure definition
 Opening \code{<proc>} tags are never recognised within \R sections.
 }
 }
-\section{Script #17 (Libraries)}{
+\section{Script #18 (Libraries)}{
 \preformatted{
 <proc "add na.strings">
   -- Takes one argument, 'add' (a character vector),
@@ -675,8 +702,8 @@ Opening \code{<proc>} tags are never recognised within \R sections.
   <return (invisible())>
 </proc>
 }
-\subsection{Commentary on Script #17}{
-The previous example, script #16, exhibited a procedure defined as a utility
+\subsection{Commentary on Script #18}{
+The previous example, script #17, exhibited a procedure defined as a utility
 within a larger \acronym{SQRL} script.
 Such definitions are not persistent, with the procedures vanishing upon the
 conclusion of their parent script.
@@ -706,7 +733,7 @@ They also offer another slight advantage in that when you change working
 directory, they come along.
 }
 }
-\section{Script #18 (Stop)}{
+\section{Script #19 (Stop)}{
 \preformatted{
 select 1
 
@@ -716,7 +743,7 @@ select 1
 -- This is unreachable.
 select 2
 }
-\subsection{Commentary on Script #18}{
+\subsection{Commentary on Script #19}{
 Lastly, \code{<stop>} tags act as an early end-of-script (with its implied
 \code{<do>}).
 They apply within \R sections, as well as \acronym{SQL}, and even on the inside
@@ -762,11 +789,16 @@ value (exits the script).
 The parentheses are mandatory.
 }
 \item{\code{<with>}:}{
-Begins a special \R section, for assigning temporary values to \pkg{RODBC}/\pkg{SQRL} parameters.
+Begins a special \R section, for assigning temporary values to
+\pkg{RODBC}/\pkg{SQRL} parameters.
 Once begun, only \code{</with>}, \code{<stop>}, \code{EOS}, and \code{</proc>}
 are recognised (and can end the section).
 The \code{</proc>} case is only recognised when the initiating \code{<with>} tag
 lies within a procedure definition (beneath a \code{<proc>} tag).
+Only the \var{aCollapse}, \var{as.is}, \var{buffsize}, \var{dec}, \var{errors},
+\var{lCollapse}, \var{max}, \var{na.strings}, \var{nullstring}, \var{ping},
+\var{pwd}, \var{retry}, \var{scdo}, \var{stringsAsFactors}, and \var{verbose}
+parameters permit temporary value assignments.
 }
 \item{\code{</with>}:}{
 Ends an \R section begun by \code{<with>}.

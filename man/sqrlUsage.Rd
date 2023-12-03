@@ -244,6 +244,7 @@ The \command{tables}, \command{columns}, \command{primarykeys} and
 \code{\link[RODBC:sqlTypeInfo]{sqlTypeInfo}}, respectively.
 These features are dependent upon the support of your \acronym{DBMS} and driver.
 For some sources, the \var{believeNRows} parameter may need to be \code{FALSE}.
+Metadata queries bypass SQRL's parser.
 }
 \section{Reviewing Settings}{
 \preformatted{
