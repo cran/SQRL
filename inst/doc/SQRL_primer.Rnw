@@ -354,6 +354,10 @@ When memory is low, the stored result can be deleted with
 \begin{shell}
 > arx(result = NULL)
 \end{shell}
+Alternatively, retention can be disabled by setting
+\begin{shell}
+> arx(retain = FALSE)
+\end{shell}
 
 
 \section{Automatic Concatenation}

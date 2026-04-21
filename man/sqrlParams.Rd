@@ -149,6 +149,12 @@ Controls whether or not to throw \R errors in response to
 \acronym{DBMS}/\acronym{ODBC} exceptions.
 The default value is \code{TRUE} (this differs from the \pkg{RODBC} default).
 }
+\item{\var{inherits}:}{
+A logical singleton.
+Controls whether or not parameterised queries inherit \R objects from within
+the enclosing frames of the invoking \pkg{SQRL} interface function call.
+The default value is \code{TRUE} (objects are inherited).
+}
 \item{\var{interface}:}{
 A character string, or \code{NULL}.
 The name of the \pkg{SQRL} interface function for this data source (see
@@ -259,6 +265,12 @@ An arbitrary object, being the final outcome of the last successful query or
 procedure.
 Read-mostly.
 Can be set to \code{NULL} (its default value), to free memory.
+}
+\item{\var{retain}:}{
+A logical singleton.
+Controls whether or not the final value of the last successful query or
+procedure is saved to the \var{result} parameter.
+The default value is \code{TRUE} (results are saved).
 }
 \item{\var{retry}:}{
 A logical singleton, \code{TRUE} by default.

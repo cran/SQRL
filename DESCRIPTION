@@ -1,9 +1,11 @@
 Package: SQRL
 Type: Package
 Title: Enhances Interaction with 'ODBC' Databases
-Version: 1.0.2
-Date: 2023-12-03
-Author: Mike Lee
+Version: 1.0.3
+Date: 2026-04-21
+Authors@R: person(given = "Mike", family = "Lee", role = c("aut", "cre"),
+                  email = "random.deviate@gmail.com")
+Author: Mike Lee [aut, cre]
 Maintainer: Mike Lee <random.deviate@gmail.com>
 Description: Provides simple and powerful interfaces that facilitate interaction
     with 'ODBC' data sources. Each data source gets its own unique and dedicated
@@ -16,6 +18,6 @@ Depends: R (>= 3.3.0)
 Imports: RODBC
 Suggests: tools, utils
 NeedsCompilation: no
-Packaged: 2023-12-03 04:30:28 UTC; Mike
+Packaged: 2026-04-21 02:59:48 UTC; Mike
 Repository: CRAN
-Date/Publication: 2023-12-03 05:00:02 UTC
+Date/Publication: 2026-04-21 11:12:10 UTC

@@ -34,7 +34,9 @@ Scripts can be parameterised, via embedded \R.
 In \acronym{SQRL}, \acronym{XML}-style tags mark the beginning and end of an \R
 block.
 As shown in \code{\link{sqrlUsage}}, values can either be passed explicitly, or
-inherited from the calling environment.
+inherited from the calling environment (inheritance can be disabled by making
+the \var{inherits} parameter \code{FALSE}, as described in
+\code{\link{sqrlParams}} and \code{\link{sqrlUsage}}).
 Embedded \R is not restricted to the insertion of values for filtering, and can
 be used to specify column names, clauses, or entire \acronym{SQL} statements.
 
@@ -106,8 +108,8 @@ The second out-of-\acronym{SQL} \R section supplies a default value for a
 variable, \var{date}, if none was explicitly passed in (see
 \code{\link{sqrlUsage}}).
 These two \R sections could be combined into one.
-The function and values from these sections are applied in the subsequent
-\acronym{SQL}.
+The function and values from these sections are used in the subsequent
+\R-within-\acronym{SQL} blocks.
 }
 }
 \section{Script #05 (Temporary Parameter Settings)}{
@@ -134,7 +136,10 @@ the connection would otherwise be left open without a defined \var{ping}.
 This mechanism only works for a limited number of parameters:
 \var{aCollapse}, \var{as.is}, \var{buffsize}, \var{dec}, \var{errors},
 \var{lCollapse}, \var{max}, \var{na.strings}, \var{nullstring}, \var{ping},
-\var{pwd}, \var{retry}, \var{scdo}, \var{stringsAsFactors}, and \var{verbose}.
+\var{pwd}, \var{retain}, \var{retry}, \var{scdo}, \var{stringsAsFactors}, and
+\var{verbose}.
+
+For permanent changes of parameter values, see script #11.
 }
 }
 \section{Script #06 (Procedural Language Blocks)}{
@@ -222,7 +227,7 @@ a \acronym{SQRL} script is developed from scratch.
 When \var{scdo} is \code{TRUE}, and a terminating semicolon is followed by a
 \code{<do>} tag, with nothing but whitespace between them, they are treated as a
 single \code{<do>} (only one submission is made).
-An implied \code{do} tag exists at the end of every script.
+An implied \code{<do>} tag exists at the end of every script.
 }
 }
 \section{Script #08 (Manipulation of Results)}{
@@ -309,9 +314,7 @@ The pasting behaviour of atomic objects is controlled by the \var{aCollapse}
 parameter.
 Similarly, the pasting behaviour of list-like objects is controlled by the
 \var{lCollapse} parameter (which defaults to the empty string).
-To restore \pkg{SQRL}-0.6.3 pasting rules, insert
-\code{<with> aCollapse = "\n"; lCollapse = ", " </with>} at the top of a script.
-See \code{\link{sqrlUsage}} and \code{\link{sqrlParams}} for further detail.
+See \code{\link{sqrlParams}} and the vignette for further detail.
 }
 }
 \section{Script #10 (Combining Data Sources)}{
@@ -343,6 +346,9 @@ where that data comes from.
   -- Check this is the intended source.
   stopifnot(sqrl("name") == "MySource")
 
+  -- Assert a parameter value.
+  sqrl(case = "toupper")
+
   -- Remember initial parameter values.
   initials <- sqrl("settings")
 
@@ -373,12 +379,22 @@ when that interface function does not exist.
 Consequently, \code{sqrl} should be adopted in preference to hard-coding
 interface names into scripts.
 
-Here, the \code{sqrl} function is first used to provide an assert, which, in
-this case, verifies the script is being run only on the intended data source.
-A second call then takes a snapshot of the current \pkg{RODBC}/\pkg{SQRL}
-parameter settings (the \command{settings} command is described in
-\code{\link{sqrlUsage}}).
-A third call then sets new values for three of those parameters, prior to
+Here, the \code{sqrl} function is first used to provide an assert, which in
+this case verifies the script is being run only on the intended data source.
+Because the \var{case} parameter cannot be changed while the connection is
+open, the second use of \code{sqrl} acts as another form of assert.
+If the connection is closed, then the value of \var{case} is allowed to change
+and it will be set to \code{"toupper"}.
+If the connection is open and \var{case} already has the value
+\code{"toupper"}, then no change occurs and the script continues normally.
+However, if the connection is open but \var{case} has any value other than
+\code{"toupper"}, then the attempt to change it produces an error and the script
+ends here.
+
+A third \code{sqrl} call then takes a snapshot of the current
+\pkg{RODBC}/\pkg{SQRL} parameter settings (the \command{settings} command is
+described in \code{\link{sqrlUsage}}).
+A fourth call then sets new values for three of those parameters, prior to
 submission of the \acronym{SQL} query.
 
 Due to \pkg{SQRL}'s set-and-forget approach, these values are persistent, and
@@ -564,15 +580,15 @@ The space in \code{else if} is optional (i.e., \code{elseif} is equally valid).
 \preformatted{
 -- If we already have a cached copy of the
 -- data, return that.
-<if (exists(.cached, .GlobalEnv))>
-  <return (get(.cached, .GlobalEnv))>
+<if (exists(".cached", .GlobalEnv))>
+  <return (get(".cached", .GlobalEnv))>
 </if>
 
 -- Otherwise, submit the query and cache the
--- result before returing it.
+-- result before returning it.
 select * from table
 <result -> x>
-  assign(.cached, x, .GlobalEnv)
+  assign(".cached", x, .GlobalEnv)
   x
 }
 \subsection{Commentary on Script #15}{
@@ -797,8 +813,8 @@ The \code{</proc>} case is only recognised when the initiating \code{<with>} tag
 lies within a procedure definition (beneath a \code{<proc>} tag).
 Only the \var{aCollapse}, \var{as.is}, \var{buffsize}, \var{dec}, \var{errors},
 \var{lCollapse}, \var{max}, \var{na.strings}, \var{nullstring}, \var{ping},
-\var{pwd}, \var{retry}, \var{scdo}, \var{stringsAsFactors}, and \var{verbose}
-parameters permit temporary value assignments.
+\var{pwd}, \var{retain}, \var{retry}, \var{scdo}, \var{stringsAsFactors}, and
+\var{verbose} parameters permit temporary value assignments.
 }
 \item{\code{</with>}:}{
 Ends an \R section begun by \code{<with>}.

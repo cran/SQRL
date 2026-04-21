@@ -1,3 +1,14 @@
+Version 1.0.3 (2026-04-21)
+
+  * Added control parameter 'inherits', which toggles the inheritance of
+    workspace variables by SQRL scripts.
+  * Added control parameter 'retain', which toggles the automatic saving of
+    query results to the result parameter.
+  * Increased robustness of the runtime generated help system.
+  * Partial reorganisation of internal functions.
+  * Small alterations to vignette and manual.
+  * Added Authors@R to the DESCRIPTION file.
+
 Version 1.0.2 (2023-12-03)
 
   * Results of metadata queries are now saved to the result parameter.

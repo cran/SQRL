@@ -88,6 +88,9 @@ owl(verbatim = "select 1 as N")
 
 # Recall the result of the last successful query.
 owl("result")
+
+# Disable result retention/recall.
+owl(retain = FALSE)
 }
 If necessary, a connection channel will be opened automatically.
 The connection will remain open afterwards, unless \var{autoclose} is
@@ -159,6 +162,9 @@ owl("my/file.sqrl", args = list(day = 1, month = "May"))
 owl(list(file = "my/file.sqrl", day = 1, month = "May"))
 owl(list(file = c("my/", "file.sqrl"),
          args = list(day = 1, month = "May")))
+
+# Disable inheritance of script parameter values.
+owl(inherits = FALSE)
 }
 To be clear, the phrase \dQuote{parameterised query} is not meant in the sense
 of prepared or parameterised statements (as per package \pkg{RODBCext}).
